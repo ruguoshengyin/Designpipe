@@ -1,76 +1,53 @@
+"""
+Chat router — conversational AI endpoint for the ChatPanel.
+Supports any step; step 4 also extracts + saves updated HTML.
+"""
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from aiosqlite import Connection
+
 from backend.database import get_db
 from backend.models import ChatRequest
-from backend.utils.ai_client import stream_ai
-from backend.utils.hifi_postprocess import postprocess_hifi
+from backend.services import step_service, ai_service
+from backend.services.project_service import project_exists, NotFoundError
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data)}\n\n"
+
+
 @router.post("")
 async def chat(body: ChatRequest, db: Connection = Depends(get_db)):
-    # verify project exists
-    async with db.execute("SELECT id FROM projects WHERE id = ?", (body.project_id,)) as cur:
-        if not await cur.fetchone():
-            raise HTTPException(status_code=404, detail="Project not found")
+    if not await project_exists(body.project_id, db):
+        raise NotFoundError("Project", body.project_id)
 
     messages = list(body.messages)
-
-    # inject image into last user message if provided (step 4 design adjustment mode)
-    if body.image:
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                content = msg.get("content", "")
-                if isinstance(content, str):
-                    msg["content"] = [
-                        {"type": "text", "text": content},
-                        {"type": "image_url", "image_url": {"url": body.image}},
-                    ]
-                break
-
-    is_step4 = body.step == 4
+    is_hifi_step = body.step == 4
 
     async def event_stream():
-        collected = []
-        async for chunk in stream_ai(messages):
+        collected: list[str] = []
+
+        async for chunk in ai_service.stream_generate(
+            messages=messages,
+            image=body.image,
+        ):
             collected.append(chunk)
-            yield f"data: {json.dumps({'delta': chunk})}\n\n"
+            yield _sse({"delta": chunk})
 
         full_response = "".join(collected)
 
-        # step 4: extract HTML block and save to DB
-        if is_step4:
-            html_content = _extract_html(full_response)
-            if html_content:
-                html_content = postprocess_hifi(html_content)
-                await db.execute(
-                    """INSERT INTO step_data (project_id, step, data_type, content)
-                       VALUES (?, 4, 'html', ?)
-                       ON CONFLICT(project_id, step) DO UPDATE SET
-                         data_type = 'html',
-                         content   = excluded.content,
-                         updated_at = CURRENT_TIMESTAMP""",
-                    (body.project_id, html_content),
-                )
-                await db.commit()
-                yield f"data: {json.dumps({'html_updated': True})}\n\n"
+        # For step 4: try to extract updated HTML and save it
+        if is_hifi_step:
+            html = ai_service.extract_html(full_response)
+            if html:
+                from backend.utils.hifi_postprocess import postprocess_hifi
+                html = postprocess_hifi(html)
+                await step_service.save_step(body.project_id, 4, "html", html, db)
+                yield _sse({"html_updated": True})
 
-        yield f"data: {json.dumps({'done': True})}\n\n"
+        yield _sse({"done": True})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-def _extract_html(text: str) -> str:
-    """Extract the first ```html ... ``` block from AI response."""
-    import re
-    m = re.search(r"```html\s*([\s\S]*?)```", text, re.IGNORECASE)
-    if m:
-        return m.group(1).strip()
-    # fallback: if entire response looks like HTML
-    stripped = text.strip()
-    if stripped.startswith("<!DOCTYPE") or stripped.startswith("<html"):
-        return stripped
-    return ""
