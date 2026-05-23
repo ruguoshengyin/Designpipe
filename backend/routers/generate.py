@@ -8,6 +8,7 @@ SSE event types emitted:
   {"done": true, "step": N, "data_type": "..."}  — all phases done
   {"error": "message"}                           — something went wrong
 """
+import asyncio
 import json
 import logging
 import re
@@ -225,76 +226,94 @@ async def _orchestrate(
         directions = concept.get("directions", [])
         yield _sse({"phase_done": "concept", "data": concept})
 
-        # Phase 3: generate wireframes for each direction
-        for i, d in enumerate(directions):
-            dk = d.get("key", chr(65 + i))
-            yield _sse({"progress": f"正在生成线框图 {dk}… ({i + 1}/{len(directions)})"})
-            wf_prompt = f"""你是UX设计师。用户的项目页面类型是【{page_type}】，截图就是这个页面。
-请生成一份**{page_type}**的移动端黑白线框图HTML，不得改变页面类型。
+        # Phase 3: generate ALL wireframes IN PARALLEL ─────────────────────────
+        yield _sse({"progress": f"正在并行生成 {len(directions)} 个线框图…（约 40 秒）"})
 
-【项目】
-{s1.get('objective', project.get('product', ''))}
-诊断：{diagnosis}
+        obj_text = s1.get("objective", project.get("product", ""))
 
-【该方向】
-{d.get('title', '')}——{d.get('oneliner', '')}
-关键动作：{'；'.join(d.get('moves', []))}
+        async def _gen_one_wireframe(d: dict, idx: int) -> dict:
+            """Generate wireframe HTML + summary for one direction. Returns enriched dict."""
+            dk = d.get("key", chr(65 + idx))
+            wf_prompt = (
+                f"你是UX设计师。用户的项目页面类型是【{page_type}】，截图就是这个页面。\n"
+                f"请生成一份**{page_type}**的移动端黑白线框图HTML，不得改变页面类型。\n\n"
+                f"【项目】\n{obj_text}\n诊断：{diagnosis}\n\n"
+                f"【该方向】\n{d.get('title', '')}——{d.get('oneliner', '')}\n"
+                f"关键动作：{'；'.join(d.get('moves', []))}\n\n"
+                f"【关键要求】\n"
+                f"- 页面类型必须是【{page_type}】，严禁生成其他类型的页面\n"
+                f"- 体现该设计方向的特征（分组前置、流程可视化、模块合并等）\n\n"
+                f"【线框图规范】\n"
+                f"- 黑白灰阶：仅用 #FFFFFF / #F5F5F5 / #E8E8E8 / #CCCCCC / #999999 / #333333\n"
+                f"- 禁止彩色、渐变、阴影\n"
+                f"- 灰色矩形/圆角矩形代替图片占位\n"
+                f"- 章节标题、按钮文字、Tab 文字保留真实文字，正文用灰色色块代替\n\n"
+                f"【技术】\n"
+                f"- width: 390px, height: 844px, overflow: hidden, margin: 0\n"
+                f"- font-family: 'PingFang SC', -apple-system, sans-serif\n"
+                f"- 样式用 <style> 标签内联\n"
+                f"- 只返回完整 HTML，从 <!DOCTYPE html> 开始，不加说明文字、不要 markdown 代码块"
+            )
 
-【关键要求】
-- 页面类型必须是【{page_type}】，严禁生成其他类型的页面
-- 体现该设计方向的特征（分组前置、流程可视化、模块合并等）
-
-【线框图规范】
-- 黑白灰阶：仅用 #FFFFFF / #F5F5F5 / #E8E8E8 / #CCCCCC / #999999 / #333333
-- 禁止彩色、渐变、阴影
-- 灰色矩形/圆角矩形代替图片占位
-- 章节标题、按钮文字、Tab 文字保留真实文字，正文用灰色色块代替
-
-【技术】
-- width: 390px, height: 844px, overflow: hidden, margin: 0
-- font-family: 'PingFang SC', -apple-system, sans-serif
-- 样式用 <style> 标签内联
-- 只返回完整 HTML，从 <!DOCTYPE html> 开始，不加说明文字、不要 markdown 代码块"""
+            # Generate wireframe HTML
+            wf_html = (
+                f'<!DOCTYPE html><html><head><meta name="viewport" content="width=390,initial-scale=1">'
+                f"<style>*{{box-sizing:border-box;margin:0;padding:0}}body{{width:390px;height:844px;"
+                f"background:#f5f5f5;display:flex;align-items:center;justify-content:center;"
+                f"font-family:'PingFang SC',sans-serif}}</style></head><body>"
+                f"<div style='text-align:center;color:#999'><div style='font-size:32px;margin-bottom:12px'>⚠️</div>"
+                f"<div style='font-size:14px'>方向 {dk} 线框图生成失败</div></div></body></html>"
+            )
+            summary = ""
             try:
-                wf_html_raw = await _call_text(wf_prompt, image)
-                m = re.search(r"<!DOCTYPE[\s\S]*?</html>", wf_html_raw, re.IGNORECASE) or \
-                    re.search(r"<html[\s\S]*?</html>", wf_html_raw, re.IGNORECASE)
-                wf_html = m.group(0) if m else wf_html_raw.replace("```html", "").replace("```", "").strip()
-                d["wireframeHTML"] = wf_html
+                raw = await _call_text(wf_prompt, image)
+                m = re.search(r"<!DOCTYPE[\s\S]*?</html>", raw, re.IGNORECASE) or \
+                    re.search(r"<html[\s\S]*?</html>", raw, re.IGNORECASE)
+                wf_html = m.group(0) if m else raw.replace("```html", "").replace("```", "").strip()
 
-                # Summarise wireframe structure
+                # Generate summary right after (still within this coroutine)
+                stripped = re.sub(r"<style[\s\S]*?</style>", "", wf_html, flags=re.IGNORECASE)
                 try:
-                    yield _sse({"progress": f"正在解析线框图 {dk} 结构…"})
-                    stripped = re.sub(r"<style[\s\S]*?</style>", "", wf_html, flags=re.IGNORECASE)
-                    summary = await _call_text(
+                    summary = (await _call_text(
                         f"分析以下移动端线框图HTML，提取页面区域结构，输出简洁列表。\n"
                         f"每行格式：区域名 | 高度或比例 | 核心内容描述（20字内）\n"
                         f"从上到下按顺序列出，不超过15行，只输出列表，不加任何说明\n\n"
                         f"线框图HTML：\n{stripped[:6000]}",
                         max_tokens=512,
-                    )
-                    d["wireframeSummary"] = summary.strip()
+                    )).strip()
                 except Exception as e:
                     logger.warning("Wireframe %s summary failed: %s", dk, e)
-                    d["wireframeSummary"] = ""
 
             except Exception as e:
                 logger.warning("Wireframe %s generation failed: %s", dk, e)
-                d["wireframeHTML"] = (
-                    f'<!DOCTYPE html><html><head><meta name="viewport" content="width=390,initial-scale=1">'
-                    f"<style>*{{box-sizing:border-box;margin:0;padding:0}}body{{width:390px;height:844px;"
-                    f"background:#f5f5f5;display:flex;align-items:center;justify-content:center;"
-                    f"font-family:'PingFang SC',sans-serif}}</style></head><body>"
-                    f"<div style='text-align:center;color:#999'><div style='font-size:32px;margin-bottom:12px'>⚠️</div>"
-                    f"<div style='font-size:14px'>方向 {dk} 线框图生成失败</div></div></body></html>"
-                )
-                d["wireframeSummary"] = ""
 
-            yield _sse({"phase_done": f"wireframe_{dk}", "data": {
-                "key": dk,
-                "html": d["wireframeHTML"],
-                "summary": d.get("wireframeSummary", ""),
-            }})
+            return {"key": dk, "html": wf_html, "summary": summary}
+
+        # Fire all wireframe tasks concurrently
+        wf_tasks = [_gen_one_wireframe(d, i) for i, d in enumerate(directions)]
+        wf_results = await asyncio.gather(*wf_tasks, return_exceptions=True)
+
+        # Merge results back and emit events
+        for i, result in enumerate(wf_results):
+            if isinstance(result, Exception):
+                dk = directions[i].get("key", chr(65 + i))
+                logger.error("Wireframe %s task raised: %s", dk, result)
+                result = {
+                    "key": dk,
+                    "html": (
+                        f'<!DOCTYPE html><html><head><meta name="viewport" content="width=390,initial-scale=1">'
+                        f"<style>*{{box-sizing:border-box;margin:0;padding:0}}body{{width:390px;height:844px;"
+                        f"background:#f5f5f5;display:flex;align-items:center;justify-content:center;"
+                        f"font-family:'PingFang SC',sans-serif}}</style></head><body>"
+                        f"<div style='text-align:center;color:#999'><div style='font-size:32px;margin-bottom:12px'>⚠️</div>"
+                        f"<div style='font-size:14px'>方向 {dk} 线框图生成失败</div></div></body></html>"
+                    ),
+                    "summary": "",
+                }
+            dk = result["key"]
+            directions[i]["wireframeHTML"] = result["html"]
+            directions[i]["wireframeSummary"] = result["summary"]
+            yield _sse({"phase_done": f"wireframe_{dk}", "data": result})
 
         # Merge wireframes back into concept and save
         concept["directions"] = directions
@@ -391,6 +410,56 @@ async def _orchestrate(
             "</div>\n\n"
             f"{qa_context}\n\n"
             f"{wireframe_section}\n\n"
+            "▓▓▓▓▓ ⚡ 可交互多屏原型要求（必须实现）▓▓▓▓▓\n"
+            "本次必须生成【多屏可交互 HTML 原型】，包含 3-5 个完整独立屏幕，用户可点击按钮跳转屏幕。\n\n"
+            "【必须采用的 HTML 骨架结构】\n"
+            "<!DOCTYPE html><html><head><meta charset='UTF-8'>\n"
+            "<style>\n"
+            "  * { box-sizing:border-box; margin:0; padding:0; }\n"
+            "  body { width:390px; height:844px; overflow:hidden; position:relative; background:#f5f5f5; }\n"
+            "  .dp-screen {\n"
+            "    position:absolute; top:0; left:0; width:390px; height:844px;\n"
+            "    overflow:hidden; background:#fff;\n"
+            "    transition:transform 0.22s cubic-bezier(.4,0,.2,1);\n"
+            "    transform:translateX(100%);\n"
+            "  }\n"
+            "  .dp-screen.active { transform:translateX(0); }\n"
+            "  .dp-screen.prev   { transform:translateX(-30%); }\n"
+            "</style>\n"
+            "</head><body>\n"
+            "  <div class='dp-screen active' id='s1'><!-- 主屏 --></div>\n"
+            "  <div class='dp-screen' id='s2'><!-- 次屏 --></div>\n"
+            "  <!-- 根据需要继续添加 s3 s4 s5 -->\n"
+            "<script>\n"
+            "  var _hist=[];\n"
+            "  function dpShow(id){\n"
+            "    var cur=document.querySelector('.dp-screen.active');\n"
+            "    if(cur){cur.classList.remove('active');cur.classList.add('prev');}\n"
+            "    document.querySelectorAll('.dp-screen.prev').forEach(function(s){if(s.id!=(cur&&cur.id))s.classList.remove('prev');});\n"
+            "    document.getElementById(id).classList.add('active');\n"
+            "    if(cur)_hist.push(cur.id);\n"
+            "  }\n"
+            "  function dpBack(){\n"
+            "    var prev=_hist.pop()||'s1';\n"
+            "    var cur=document.querySelector('.dp-screen.active');\n"
+            "    if(cur){cur.classList.remove('active');}\n"
+            "    document.querySelectorAll('.dp-screen.prev').forEach(function(s){s.classList.remove('prev');});\n"
+            "    document.getElementById(prev).classList.add('active');\n"
+            "  }\n"
+            "</script>\n"
+            "</body></html>\n\n"
+            "【屏幕规划指南——根据页面类型智能规划 3-5 个屏幕】\n"
+            "  s1（主屏）：完整主页面，包含所有必含模块、Tab bar、CTA 按钮\n"
+            "  s2：点击最主要 CTA（如「我想买」「立即购买」「联系卖家」「提交订单」）后的结果页\n"
+            "  s3：点击次要 CTA（如「出价」「加入购物车」「查看更多图片」「筛选」）后的结果页\n"
+            "  s4（可选）：再深一层的交互（图片全屏 / 评价列表 / 卖家主页 / 订单确认）\n"
+            "  s5（可选）：底部 Tab 另一个 tab 的页面预览\n\n"
+            "【交互绑定硬规则】\n"
+            "  ① 所有按钮、Tab 项、图片入口、链接文字必须绑定 onclick=\"dpShow('sN')\" 跳转对应屏幕\n"
+            "  ② s2 及之后的屏幕，nav-bar 左侧必须有 ← 返回按钮，onclick=\"dpBack()\"\n"
+            "  ③ 不要使用 <a href> 跳转，所有导航只用 dpShow / dpBack\n"
+            "  ④ 每个屏幕都要有完整的 status-bar + nav-bar + 页面内容 + 底部 Tab bar（若有）\n"
+            "  ⑤ 所有屏幕视觉风格、色彩规范必须与 s1 保持一致\n\n"
             "只返回完整 HTML，从 <!DOCTYPE html> 开始，禁止 markdown 代码块，禁止任何说明文字。"
         )
 
@@ -409,21 +478,23 @@ async def _orchestrate(
                 f"形态:{m.get('what','')}｜识别特征:{m.get('signal','')}"
                 for i, m in enumerate(strategy_modules)
             )
-            check_prompt = f"""你是UX设计稿质检员。下面这份高保真HTML本应落地一套"必含模块"，
-请逐条核对，把"缺失"或"只是文字提及但没有对应UI"的模块补进HTML，最后返回完整修正后的HTML。
+            check_prompt = f"""你是UX设计稿质检员。下面这份高保真HTML是一个【多屏可交互原型】，本应落地一套"必含模块"。
+请逐条核对 s1（主屏）是否包含所有必含模块，把"缺失"或"只是文字提及但没有对应UI"的模块补进s1，最后返回完整修正后的HTML。
 
-【本页必含模块清单——逐条核对】
+【本页必含模块清单——逐条核对（针对 s1 主屏）】
 {module_list}
 
 【核对方法】
-- 对每个模块，在HTML里找它对应的真实UI元素（不是注释、不是纯文字一句话）
+- 对每个模块，在 s1 的 HTML 里找对应的真实UI元素（不是注释、不是纯文字一句话）
 - 找到且符合"识别特征" → 保留
 - 找不到 / 只是文字带过 / 不符合识别特征 → 在"位置"处补出符合"形态+识别特征"的真实UI
 
-【硬约束】
+【硬约束——多屏结构必须完整保留】
 - 只增补缺失模块、修正不达标模块，不得删除已有业务区块
-- 必须保留顶部 status-bar（44px）与 nav-bar，结构顺序不变
-- 整页仍是 390×844、overflow:hidden
+- 必须保留所有 .dp-screen 屏幕（s1, s2, s3... 完整保留）
+- 必须保留 <script> 中的 dpShow / dpBack 导航函数
+- 必须保留所有按钮上的 onclick="dpShow(...)" / onclick="dpBack()" 绑定
+- 所有屏幕仍是 390×844、overflow:hidden
 - 沿用页面已有的转转视觉风格，不要引入新风格
 - 直接返回完整HTML，从<!DOCTYPE html>开始，禁止markdown代码块、禁止任何说明文字
 
@@ -477,27 +548,40 @@ async def _orchestrate(
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("")
-async def generate(body: GenerateRequest, db: Connection = Depends(get_db)):
-    project = await get_project(body.project_id, db)
-
+async def generate(body: GenerateRequest):
+    """
+    Validate request eagerly, then stream the response.
+    We open our OWN database connection inside the generator so it stays
+    alive for the full duration of the SSE stream (FastAPI closes Depends
+    connections when the handler returns, before the stream is consumed).
+    """
     if body.step not in (1, 2, 3, 4):
         raise BadRequestError(f"Invalid step: {body.step}. Valid: 1 2 3 4")
 
     qa_context = f"\n{body.qa_context}\n" if body.qa_context else ""
 
     async def event_stream():
-        try:
-            async for event in _orchestrate(
-                step=body.step,
-                project=project,
-                direction=body.direction,
-                image=body.image,
-                qa_context=qa_context,
-                db=db,
-            ):
-                yield event
-        except Exception as exc:
-            logger.exception("Generate step=%s failed", body.step)
-            yield _sse({"error": str(exc)})
+        import aiosqlite
+        from backend.database import DB_PATH
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            try:
+                project = await get_project(body.project_id, db)
+            except Exception as exc:
+                yield _sse({"error": str(exc)})
+                return
+            try:
+                async for event in _orchestrate(
+                    step=body.step,
+                    project=project,
+                    direction=body.direction,
+                    image=body.image,
+                    qa_context=qa_context,
+                    db=db,
+                ):
+                    yield event
+            except Exception as exc:
+                logger.exception("Generate step=%s failed", body.step)
+                yield _sse({"error": str(exc)})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

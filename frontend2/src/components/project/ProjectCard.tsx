@@ -115,14 +115,16 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project: p, onOpen, in
 
 interface NewProjectCardProps {
   onClick: () => void
+  loading?: boolean
 }
 
-export const NewProjectCard: React.FC<NewProjectCardProps> = ({ onClick }) => {
+export const NewProjectCard: React.FC<NewProjectCardProps> = ({ onClick, loading }) => {
   const [hovered, setHovered] = React.useState(false)
   return (
     <button
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
+      disabled={loading}
+      onMouseEnter={() => !loading && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         background: hovered ? 'white' : 'rgba(255,255,255,0.5)',
@@ -130,9 +132,10 @@ export const NewProjectCard: React.FC<NewProjectCardProps> = ({ onClick }) => {
         borderRadius: 18, minHeight: 200,
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 12,
-        cursor: 'pointer', fontFamily: 'inherit',
+        cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
         transition: 'all 0.2s ease',
         transform: hovered ? 'translateY(-2px)' : 'none',
+        opacity: loading ? 0.6 : 1,
       }}
     >
       <div style={{
@@ -143,7 +146,10 @@ export const NewProjectCard: React.FC<NewProjectCardProps> = ({ onClick }) => {
         color: hovered ? 'var(--ac)' : 'var(--tx-4)',
         transition: 'all 0.2s ease',
       }}>
-        <Icon name="plus" size={22} />
+        {loading
+          ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          : <Icon name="plus" size={22} />
+        }
       </div>
       <div>
         <div style={{
@@ -151,11 +157,11 @@ export const NewProjectCard: React.FC<NewProjectCardProps> = ({ onClick }) => {
           color: hovered ? 'var(--ac)' : 'var(--tx-3)',
           textAlign: 'center', marginBottom: 4,
           transition: 'color 0.2s',
-        }}>新建设计项目</div>
+        }}>{loading ? '创建中…' : '新建设计项目'}</div>
         <div style={{
           fontSize: 11.5, color: 'var(--tx-4)',
           textAlign: 'center', maxWidth: 160,
-        }}>从需求开始 · 走完 5 步或只取所需</div>
+        }}>{loading ? '正在初始化项目' : '从需求开始 · 走完 5 步或只取所需'}</div>
       </div>
     </button>
   )

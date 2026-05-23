@@ -11,16 +11,28 @@ declare global {
     dpSetStep: any
     dpLoadWorkflowState: any
     dpSaveWorkflowState: any
+    dpClearCache: any
   }
 }
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
+/** Normalize a server project (snake_case) so UI components (camelCase) work correctly. */
+const normalizeProject = (p: any): any => ({
+  ...p,
+  currentStep: p.currentStep ?? p.current_step ?? 0,
+  maxStep: p.maxStep ?? p.max_step ?? 5,
+  targetUser: p.targetUser ?? p.target_user ?? '',
+  updatedAt: p.updatedAt ?? p.updated_at ?? '刚刚',
+  collaborators: p.collaborators ?? [],
+})
+
 const API = {
   async listProjects(): Promise<any[]> {
     const res = await fetch('/api/projects')
     if (!res.ok) return []
-    return res.json()
+    const list = await res.json()
+    return list.map(normalizeProject)
   },
   async createProject(data: any): Promise<any> {
     const res = await fetch('/api/projects', {
@@ -28,7 +40,7 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
-    return res.json()
+    return normalizeProject(await res.json())
   },
   async updateProject(id: string, updates: any): Promise<void> {
     await fetch(`/api/projects/${id}`, {
@@ -62,13 +74,11 @@ const DEMO_PROJECT = {
 }
 
 const STEPS_META = [
-  { idx: 1, name: '竞品分析', en: 'research',  icon: 'search' },
-  { idx: 2, name: '设计分析', en: 'diagnose',  icon: 'layers' },
-  { idx: 3, name: '概念方向', en: 'concept',   icon: 'lightbulb' },
-  { idx: 4, name: '线框图',   en: 'wireframe', icon: 'layout' },
-  { idx: 5, name: '高保真',   en: 'hi-fi',     icon: 'smartphone' },
-  { idx: 6, name: '标注交付', en: 'handoff',   icon: 'code' },
-  { idx: 7, name: '总结',     en: 'summary',   icon: 'check-circle' },
+  { idx: 1, name: '竞品分析', en: 'research', icon: 'search' },
+  { idx: 2, name: '设计分析', en: 'diagnose', icon: 'layers' },
+  { idx: 3, name: '概念·线框', en: 'concept',  icon: 'layout' },
+  { idx: 4, name: '高保真',   en: 'hi-fi',    icon: 'smartphone' },
+  { idx: 5, name: '交付总结', en: 'handoff',  icon: 'check-circle' },
 ]
 
 // ── Init global DPData ────────────────────────────────────────────────────────
@@ -87,14 +97,41 @@ window.DPData = {
   designSpec: DPDesignSpec,
 }
 
-window.dpLoadWorkflowState = () => {
+// Cache key is project-specific to avoid cross-project data leakage
+const _cacheKey = (pid?: string) => `dp_wf_v3_${pid || 'default'}`
+
+window.dpLoadWorkflowState = (projectId?: string) => {
   try {
-    const raw = localStorage.getItem('dp_wf_state_v2')
+    const raw = localStorage.getItem(_cacheKey(projectId))
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
-window.dpSaveWorkflowState = (state: any) => {
-  try { localStorage.setItem('dp_wf_state_v2', JSON.stringify(state)) } catch {}
+window.dpSaveWorkflowState = (state: any, projectId?: string) => {
+  try {
+    // Also snapshot current DPData step content so it survives page reloads
+    const dpData = (window as any).DPData || {}
+    const full = {
+      ...state,
+      _dpStep1: dpData.step1 || null,
+      _dpStep2: dpData.step2 || null,
+      _dpStep4: dpData.step4 || null,
+      _dpStep7: dpData.step7 || null,
+      _dpPageType: dpData.pageType || null,
+      _dpUploadedImage: dpData.uploadedImage || null,
+      // step6 (hi-fi HTML) can be very large — store separately under size limit
+    }
+    localStorage.setItem(_cacheKey(projectId), JSON.stringify(full))
+    // Also store hi-fi HTML separately (may be large)
+    if (dpData.step6?.html) {
+      try { localStorage.setItem(_cacheKey(projectId) + '_hifi', dpData.step6.html) } catch {}
+    }
+  } catch {}
+}
+window.dpClearCache = (projectId?: string) => {
+  try {
+    localStorage.removeItem(_cacheKey(projectId))
+    localStorage.removeItem(_cacheKey(projectId) + '_hifi')
+  } catch {}
 }
 
 // ── Tweaks ────────────────────────────────────────────────────────────────────
@@ -119,16 +156,34 @@ const App = () => {
   const [chatOpen, setChatOpen] = React.useState(t.chatOpen)
   const [projects, setProjects] = React.useState<any[]>([DEMO_PROJECT])
   const [loading, setLoading] = React.useState(true)
+  const [creating, setCreating] = React.useState(false)
 
-  // Load projects from API on mount
+  // Load projects from API on mount — with retry on failure
   React.useEffect(() => {
-    API.listProjects().then(apiProjects => {
-      const all = [DEMO_PROJECT, ...apiProjects.filter((p: any) => p.id !== 'iphone15')]
-      setProjects(all)
-      window.DPData.projects = all
-    }).catch(() => {
-      // API unavailable — keep demo project
-    }).finally(() => setLoading(false))
+    let cancelled = false
+    const load = async (attempt = 0) => {
+      try {
+        const apiProjects = await API.listProjects()
+        if (cancelled) return
+        const all = [DEMO_PROJECT, ...apiProjects.filter((p: any) => p.id !== 'iphone15')]
+        setProjects(all)
+        window.DPData.projects = all
+        setLoading(false)
+      } catch {
+        if (cancelled) return
+        if (attempt < 4) {
+          // Retry: 1s, 2s, 3s, 4s back-off — backend may still be starting
+          setTimeout(() => load(attempt + 1), (attempt + 1) * 1000)
+        } else {
+          // Give up after 4 retries — show demo project only
+          setLoading(false)
+        }
+      }
+    }
+    // Hard cap: never show loading spinner past 12s
+    const cap = setTimeout(() => { if (!cancelled) setLoading(false) }, 12000)
+    load()
+    return () => { cancelled = true; clearTimeout(cap) }
   }, [])
 
   // Apply tweaks
@@ -143,46 +198,73 @@ const App = () => {
 
   const openProject = (id: string) => {
     const p = projects.find((x: any) => x.id === id)
-    const hasProgress = p && (p.current_step || p.currentStep || 0) > 0 && p.status !== '草稿'
+    const step = p?.currentStep ?? p?.current_step ?? 0
+    // Has progress if step > 0, OR if there's a saved cache for this project
+    const hasCachedState = !!localStorage.getItem(`dp_wf_v3_${id}`)
+    const hasProgress = (step > 0 || hasCachedState) && p?.status !== '草稿'
     setRoute({ view: 'workflow', projectId: id, skipKickoff: hasProgress })
   }
 
   const newProject = async () => {
-    const id = 'proj_' + Date.now()
-    const newP = {
-      id, title: '新设计项目', product: '', target_user: '', scenario: '',
-      style: '通用风格', cover: 'new', current_step: 0, max_step: 5,
-      direction: null, updatedAt: '刚刚', collaborators: [], status: '草稿', tag: '新建',
+    if (creating) return
+    setCreating(true)
+    // Create the project on server FIRST to get the real UUID, then navigate.
+    // This avoids the temp-id ↔ server-uuid mismatch that causes state updates to be lost.
+    let id: string
+    const baseData = {
+      product: '', target_user: '', scenario: '',
+      title: '新设计项目', style: '通用风格', cover: 'new',
+      status: '草稿', tag: '新建',
     }
-    // Optimistic update — add to UI immediately
-    const withNew = [...projects, newP]
-    setProjects(withNew)
-    window.DPData.projects = withNew
-    setRoute({ view: 'workflow', projectId: id, skipKickoff: false })
-    // Persist to API in background
     try {
-      const saved = await API.createProject({
-        product: '', target_user: '', scenario: '',
-        title: '新设计项目', style: '通用风格', cover: 'new',
-        status: '草稿', tag: '新建',
+      const saved = await API.createProject(baseData)
+      id = saved.id
+      const newP = {
+        ...baseData, id,
+        current_step: saved.current_step ?? 0,
+        currentStep: saved.current_step ?? 0,
+        max_step: saved.max_step ?? 5,
+        maxStep: saved.max_step ?? 5,
+        direction: null, updatedAt: '刚刚', collaborators: [], tag: '新建',
+      }
+      setProjects(prev => {
+        const next = [...prev, newP]
+        window.DPData.projects = next
+        return next
       })
-      // Replace temp project with real one from server (keeps same UI project by id override)
-      setProjects(prev => prev.map(p => p.id === id ? { ...newP, ...saved } : p))
     } catch (e) {
-      console.warn('Failed to save project to API:', e)
+      // API unavailable — fall back to offline temp id
+      console.warn('Failed to create project on API, using temp id:', e)
+      id = 'proj_' + Date.now()
+      const newP = {
+        id, title: '新设计项目', product: '', target_user: '', scenario: '',
+        style: '通用风格', cover: 'new', current_step: 0, currentStep: 0,
+        max_step: 5, maxStep: 5,
+        direction: null, updatedAt: '刚刚', collaborators: [], status: '草稿', tag: '新建',
+      }
+      setProjects(prev => {
+        const next = [...prev, newP]
+        window.DPData.projects = next
+        return next
+      })
     }
+    setCreating(false)
+    setRoute({ view: 'workflow', projectId: id, skipKickoff: false })
   }
 
   const onProjectUpdate = async (id: string, updates: any) => {
-    // Normalize field names (frontend uses camelCase, API uses snake_case)
+    // Keep both snake_case (for API) and camelCase (for UI components) in sync
     const normalized = {
       ...updates,
       current_step: updates.currentStep ?? updates.current_step,
-      target_user: updates.targetUser ?? updates.target_user,
-      max_step: updates.maxStep ?? updates.max_step,
+      currentStep:  updates.currentStep ?? updates.current_step,
+      target_user:  updates.targetUser  ?? updates.target_user,
+      targetUser:   updates.targetUser  ?? updates.target_user,
+      max_step:     updates.maxStep     ?? updates.max_step,
+      maxStep:      updates.maxStep     ?? updates.max_step,
     }
     setProjects(prev => {
-      const next = prev.map(p => p.id === id ? { ...p, ...updates, ...normalized } : p)
+      const next = prev.map(p => p.id === id ? { ...p, ...normalized } : p)
       window.DPData.projects = next
       return next
     })
@@ -208,7 +290,7 @@ const App = () => {
     <>
       {route.view === 'home'
         ? <Home onOpenProject={openProject} onNewProject={newProject}
-            projects={projects} setProjects={setProjects} />
+            projects={projects} setProjects={setProjects} creating={creating} />
         : <Workflow projectId={route.projectId} skipKickoff={route.skipKickoff}
             onBack={() => setRoute({ view: 'home' })}
             onProjectUpdate={onProjectUpdate}

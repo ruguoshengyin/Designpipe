@@ -168,36 +168,38 @@ export const Kickoff: React.FC<KickoffProps> = ({ project, onStart, onBack }) =>
 
   const handleConfirm = async (startStep: number) => {
     setThinking(true)
-    setLoadingMsg('AI 正在生成竞品分析…')
-
-    ;(window as any).dpClearCache()
-
-    const dpData = (window as any).DPData
-    dpData.step2 = {}
-    dpData.step3 = {}
-    dpData.step4 = { directions: [], recommendation: {} }
-    dpData.step5 = {}
-    dpData.step6 = null
-    dpData.step7 = {}
-    dpData.uploadedImage = null
-    dpData.pageType = null
-
-    const userStep1Base = {
-      objective: `围绕「${projectBrief?.product || input}」${projectBrief?.goal || '提升用户体验'}`,
-      focus: [projectBrief?.goal || '用户体验优化', '信息架构', '交互流程', '视觉还原', '可用性'],
-      competitors: [],
-      inputs: [
-        `产品：${projectBrief?.product || input}`,
-        `目标用户：${projectBrief?.targetUser || ''}`,
-        `核心目标：${projectBrief?.goal || ''}`,
-        `使用场景：${projectBrief?.context || ''}`,
-      ].filter(s => s.trim().length > 4),
-    }
-    dpData.step1 = userStep1Base
+    setLoadingMsg(startStep === 3 ? 'AI 正在准备数据…（约 10 秒）' : 'AI 正在生成竞品分析…')
 
     try {
-      const step1 = await callAI(
-        `你是资深 UX 设计师，为以下项目生成竞品分析报告，只返回 JSON，不加任何说明：
+      // Safe clear — function may not exist in all environments
+      ;(window as any).dpClearCache?.()
+
+      const dpData = (window as any).DPData
+      dpData.step2 = {}
+      dpData.step3 = {}
+      dpData.step4 = { directions: [], recommendation: {} }
+      dpData.step5 = {}
+      dpData.step6 = null
+      dpData.step7 = {}
+      dpData.uploadedImage = null
+      dpData.pageType = null
+
+      const userStep1Base = {
+        objective: `围绕「${projectBrief?.product || input}」${projectBrief?.goal || '提升用户体验'}`,
+        focus: [projectBrief?.goal || '用户体验优化', '信息架构', '交互流程', '视觉还原', '可用性'],
+        competitors: [],
+        inputs: [
+          `产品：${projectBrief?.product || input}`,
+          `目标用户：${projectBrief?.targetUser || ''}`,
+          `核心目标：${projectBrief?.goal || ''}`,
+          `使用场景：${projectBrief?.context || ''}`,
+        ].filter(s => s.trim().length > 4),
+      }
+      dpData.step1 = userStep1Base
+
+      try {
+        const step1 = await callAI(
+          `你是资深 UX 设计师，为以下项目生成竞品分析报告，只返回 JSON，不加任何说明：
 {
   "objective": "本次分析目标（一句话，30字内）",
   "focus": ["分析焦点1（15字内）","分析焦点2","分析焦点3","分析焦点4","分析焦点5"],
@@ -218,45 +220,50 @@ export const Kickoff: React.FC<KickoffProps> = ({ project, onStart, onBack }) =>
     ? `\n重点分析以下竞品（用户指定）：${dpData.chosenCompetitors.join('、')}`
     : ''
 }${buildQAContext()}`
-      )
-      dpData.step1 = step1
-    } catch (e) {
-      console.warn('step1 AI 生成失败，使用用户输入作为基础数据', e)
-    }
-    if (pageImage) dpData.uploadedImage = pageImage
+        )
+        dpData.step1 = step1
+      } catch (e) {
+        console.warn('step1 AI 生成失败，使用用户输入作为基础数据', e)
+      }
+      if (pageImage) dpData.uploadedImage = pageImage
 
-    if (startStep === 3) {
-      try {
-        setLoadingMsg('AI 正在生成设计分析…')
-        const s1 = dpData.step1 || {}
-        const briefStr = `分析目标：${s1.objective || ''}\n设计输入：${(s1.inputs || []).slice(0, 3).join('；')}`
-        const step2 = await callAI(`你是资深UX设计师。生成设计分析，只返回JSON不加说明：
+      if (startStep === 3) {
+        try {
+          setLoadingMsg('AI 正在生成设计分析…（2/3）')
+          const s1 = dpData.step1 || {}
+          const briefStr = `分析目标：${s1.objective || ''}\n设计输入：${(s1.inputs || []).slice(0, 3).join('；')}`
+          const step2 = await callAI(`你是资深UX设计师。生成设计分析，只返回JSON不加说明：
 ${briefStr}
 {"diagnosis":"核心问题2句","opportunities":[{"p":"P0","name":"机会1","why":"15字","impact":"10字"},{"p":"P0","name":"机会2","why":"15字","impact":"10字"},{"p":"P1","name":"机会3","why":"15字","impact":"10字"}],"principles":["原则1","原则2","原则3"]}`)
-        dpData.step2 = step2
+          dpData.step2 = step2
 
-        setLoadingMsg('AI 正在生成概念方向…')
-        const s2 = step2 || {}
-        const opps = (s2.opportunities || []).map((o: any) => `${o.p} ${o.name}`).join('；')
-        const pageType = pageImage ? '移动端页面' : (s1.objective || '移动端页面').substring(0, 20)
-        dpData.pageType = pageType
-        const step4 = await callAI(`你是资深UX设计师。生成3个差异化概念方向，只返回JSON不加说明：
+          setLoadingMsg('AI 正在生成概念方向…（3/3）')
+          const s2 = step2 || {}
+          const opps = (s2.opportunities || []).map((o: any) => `${o.p} ${o.name}`).join('；')
+          const pageType = pageImage ? '移动端页面' : (s1.objective || '移动端页面').substring(0, 20)
+          dpData.pageType = pageType
+          const step4 = await callAI(`你是资深UX设计师。生成3个差异化概念方向，只返回JSON不加说明：
 诊断：${s2.diagnosis || ''}
 机会点：${opps}
 页面类型：${pageType}
 ${briefStr}
 {"directions":[{"key":"A","title":"方向名(4字)","subtitle":"定位(12字)","oneliner":"策略(30字)","moves":["动作1","动作2","动作3"],"advantage":"优势","tradeoff":"代价","cost":"low","impact":"影响","cite":"对应机会"},{"key":"B","title":"...","subtitle":"...","oneliner":"...","moves":["...","...","..."],"advantage":"...","tradeoff":"...","cost":"med","impact":"...","cite":"...","recommended":true},{"key":"C","title":"...","subtitle":"...","oneliner":"...","moves":["...","...","..."],"advantage":"...","tradeoff":"...","cost":"high","impact":"...","cite":"..."}],"recommendation":{"pick":"B","reason":"推荐理由"}}`)
-        dpData.step4 = { ...dpData.step4, ...step4 }
-      } catch (e) {
-        console.warn('跳步生成失败，请通过完整流程生成', e)
+          dpData.step4 = { ...dpData.step4, ...step4 }
+        } catch (e) {
+          console.warn('跳步生成失败，请通过完整流程生成', e)
+        }
       }
-    }
 
-    ;(window as any).dpSaveCache()
-    dpData._lastBrief = projectBrief
-    setLoadingMsg('')
-    setThinking(false)
-    onStart(startStep)
+      ;(window as any).dpSaveCache?.()
+      dpData._lastBrief = projectBrief
+      onStart(startStep)
+    } catch (e) {
+      console.error('handleConfirm failed:', e)
+    } finally {
+      // Always reset loading state, even if an error occurred mid-way
+      setLoadingMsg('')
+      setThinking(false)
+    }
   }
 
   const suggestions = [

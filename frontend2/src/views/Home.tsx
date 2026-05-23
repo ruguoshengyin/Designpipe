@@ -7,9 +7,10 @@ interface HomeProps {
   onNewProject: () => void
   projects: any[]
   setProjects: (p: any[]) => void
+  creating?: boolean
 }
 
-export const Home: React.FC<HomeProps> = ({ onOpenProject, onNewProject, projects, setProjects }) => {
+export const Home: React.FC<HomeProps> = ({ onOpenProject, onNewProject, projects, setProjects, creating }) => {
   const [view, setView] = React.useState('grid')
   const [filter, setFilter] = React.useState('all')
 
@@ -92,21 +93,24 @@ export const Home: React.FC<HomeProps> = ({ onOpenProject, onNewProject, project
           </p>
 
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button onClick={onNewProject} style={{
+            <button onClick={onNewProject} disabled={creating} style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               height: 42, padding: '0 22px', fontFamily: 'inherit',
-              background: 'var(--ac)', color: 'white',
+              background: creating ? 'var(--tx-4)' : 'var(--ac)', color: 'white',
               border: 'none', borderRadius: 11, fontSize: 14, fontWeight: 600,
-              cursor: 'pointer', transition: 'opacity 0.15s, transform 0.15s',
+              cursor: creating ? 'not-allowed' : 'pointer', transition: 'opacity 0.15s, transform 0.15s, background 0.2s',
             }}
-              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0.88'}
+              onMouseEnter={e => !creating && ((e.currentTarget as HTMLButtonElement).style.opacity = '0.88')}
               onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
-              onMouseDown={e => (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.97)'}
+              onMouseDown={e => !creating && ((e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.97)')}
               onMouseUp={e => (e.currentTarget as HTMLButtonElement).style.transform = 'none'}
             >
-              <Icon name="plus" size={15} />
-              新建设计项目
+              {creating
+                ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.8s linear infinite' }}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>创建中…</>
+                : <><Icon name="plus" size={15} />新建设计项目</>
+              }
             </button>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
             <button onClick={() => onOpenProject('iphone15')} style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -251,7 +255,7 @@ export const Home: React.FC<HomeProps> = ({ onOpenProject, onNewProject, project
             {filtered.map((p, i) => (
               <ProjectCard key={p.id} project={p} onOpen={() => onOpenProject(p.id)} index={i} />
             ))}
-            <NewProjectCard onClick={onNewProject} />
+            <NewProjectCard onClick={onNewProject} loading={creating} />
           </div>
         ) : (
           <ProjectList projects={filtered} onOpen={onOpenProject} />

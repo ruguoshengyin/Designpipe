@@ -26,7 +26,27 @@ export const Workflow: React.FC<WorkflowProps> = ({
 }) => {
   const project = (window as any).DPData.projects.find((p: any) => p.id === projectId)
 
-  const _cachedWF = React.useMemo(() => (window as any).dpLoadWorkflowState(), [])
+  const _cachedWF = React.useMemo(() => (window as any).dpLoadWorkflowState(projectId), [projectId])
+
+  // Restore DPData step content from cache on first mount (survives page reload)
+  React.useMemo(() => {
+    if (!_cachedWF) return
+    const dp = (window as any).DPData
+    if (_cachedWF._dpStep1 && !dp.step1) dp.step1 = _cachedWF._dpStep1
+    if (_cachedWF._dpStep2 && !dp.step2) dp.step2 = _cachedWF._dpStep2
+    if (_cachedWF._dpStep4 && !dp.step4?.directions?.length) dp.step4 = _cachedWF._dpStep4
+    if (_cachedWF._dpStep7 && !dp.step7) dp.step7 = _cachedWF._dpStep7
+    if (_cachedWF._dpPageType && !dp.pageType) dp.pageType = _cachedWF._dpPageType
+    if (_cachedWF._dpUploadedImage && !dp.uploadedImage) dp.uploadedImage = _cachedWF._dpUploadedImage
+    // Restore hi-fi HTML separately
+    if (!dp.step6?.html) {
+      try {
+        const hifi = localStorage.getItem(`dp_wf_v3_${projectId}_hifi`)
+        if (hifi) dp.step6 = { ...(dp.step6 || {}), html: hifi }
+      } catch {}
+    }
+  }, [_cachedWF, projectId])
+
   const _hasCachedSteps = !!(
     (window as any).DPData.step1?.competitors?.length ||
     (window as any).DPData.step2?.diagnosis ||
@@ -266,7 +286,7 @@ export const Workflow: React.FC<WorkflowProps> = ({
       await generateForStep(currentStep!)
     }
     setCurrentStep(nextStep)
-    ;(window as any).dpSaveWorkflowState({ currentStep: nextStep, completedStep: newCompleted, chosenDirection })
+    ;(window as any).dpSaveWorkflowState({ currentStep: nextStep, completedStep: newCompleted, chosenDirection }, projectId)
     if (onProjectUpdate) onProjectUpdate(projectId, {
       currentStep: nextStep,
       completedStep: newCompleted,
@@ -872,7 +892,7 @@ ${brief}
       setGenLabel('')
       setRunningStep(null)
       setContentVersion(v => v + 1)
-      ;(window as any).dpSaveWorkflowState({ currentStep, completedStep, chosenDirection })
+      ;(window as any).dpSaveWorkflowState({ currentStep, completedStep, chosenDirection }, projectId)
     }
   }
 
@@ -885,7 +905,7 @@ ${brief}
 
   const stepContent = (() => {
     switch (currentStep) {
-      case 1: return <Step1 key={contentVersion} data={(window as any).DPData.step1} project={project} running={runningStep === 1} genLabel={genLabel} />
+      case 1: return <Step1 key={contentVersion} data={(window as any).DPData.step1 || {}} project={project} running={runningStep === 1} genLabel={genLabel} />
       case 2: return <Step2 key={contentVersion} data={(window as any).DPData.step2} running={runningStep === 2} genLabel={genLabel} />
       case 3: return <Step3 key={contentVersion} data4={(window as any).DPData.step4} chosen={chosenDirection} onChoose={setChosenDirection} running={runningStep === 2 || runningStep === 3} genLabel={genLabel} />
       case 4: return <Step6 key={contentVersion} project={project} running={runningStep === 3 || runningStep === 4} genLabel={genLabel} />
@@ -975,7 +995,7 @@ ${brief}
             onSelect={(idx: number) => {
               if (idx <= completedStep || idx === currentStep) {
                 setCurrentStep(idx)
-                ;(window as any).dpSaveWorkflowState({ currentStep: idx, completedStep, chosenDirection })
+                ;(window as any).dpSaveWorkflowState({ currentStep: idx, completedStep, chosenDirection }, projectId)
               }
             }}
           />
