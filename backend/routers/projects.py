@@ -1,6 +1,3 @@
-"""
-Projects router — HTTP only, delegates all logic to project_service.
-"""
 from fastapi import APIRouter, Depends
 from aiosqlite import Connection
 
@@ -18,12 +15,7 @@ async def list_projects(db: Connection = Depends(get_db)):
 
 @router.post("", status_code=201)
 async def create_project(body: ProjectCreate, db: Connection = Depends(get_db)):
-    return await project_service.create_project(
-        product=body.product,
-        target_user=body.target_user,
-        scenario=body.scenario,
-        db=db,
-    )
+    return await project_service.create_project(body.model_dump(), db)
 
 
 @router.get("/{project_id}")

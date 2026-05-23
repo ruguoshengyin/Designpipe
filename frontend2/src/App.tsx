@@ -3,7 +3,6 @@ import { Home } from './views/Home'
 import { Workflow } from './components/Workflow'
 import { TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakToggle, TweakButton } from './components/tweaks'
 import { useTweaks } from './hooks/useTweaks'
-import { dpLoadProjects as loadProjects, dpSaveProjects as saveProjects } from './constants/cache'
 import { DPDesignSpec } from './constants/designSpec'
 
 declare global {
@@ -12,22 +11,49 @@ declare global {
     dpSetStep: any
     dpLoadWorkflowState: any
     dpSaveWorkflowState: any
-    dpLoadProjects: any
-    dpSaveProjects: any
   }
 }
 
-// ── Global DPData initialisation ─────────────────────────────────────────────
+// ── API helpers ───────────────────────────────────────────────────────────────
+
+const API = {
+  async listProjects(): Promise<any[]> {
+    const res = await fetch('/api/projects')
+    if (!res.ok) return []
+    return res.json()
+  },
+  async createProject(data: any): Promise<any> {
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    return res.json()
+  },
+  async updateProject(id: string, updates: any): Promise<void> {
+    await fetch(`/api/projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    })
+  },
+  async deleteProject(id: string): Promise<void> {
+    await fetch(`/api/projects/${id}`, { method: 'DELETE' })
+  },
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const DEMO_PROJECT = {
   id: 'iphone15',
   title: 'iPhone 15 转转详情页改版',
   product: '转转二手交易平台 iPhone 15 商品详情页',
-  targetUser: '18-30岁二手手机买家',
+  target_user: '18-30岁二手手机买家',
   scenario: '用户在转转上浏览 iPhone 15，需要快速判断是否值得购买',
   style: '转转风格',
   cover: 'mobile',
-  currentStep: 5,
-  maxStep: 5,
+  current_step: 5,
+  max_step: 5,
   direction: null,
   updatedAt: '2天前',
   collaborators: ['Bingyao', 'Alex'],
@@ -36,22 +62,19 @@ const DEMO_PROJECT = {
 }
 
 const STEPS_META = [
-  { idx: 1, name: '竞品分析', en: 'research',   icon: 'search' },
-  { idx: 2, name: '设计分析', en: 'diagnose',   icon: 'layers' },
-  { idx: 3, name: '概念方向', en: 'concept',    icon: 'lightbulb' },
-  { idx: 4, name: '线框图',   en: 'wireframe',  icon: 'layout' },
-  { idx: 5, name: '高保真',   en: 'hi-fi',      icon: 'smartphone' },
-  { idx: 6, name: '标注交付', en: 'handoff',    icon: 'code' },
-  { idx: 7, name: '总结',     en: 'summary',    icon: 'check-circle' },
+  { idx: 1, name: '竞品分析', en: 'research',  icon: 'search' },
+  { idx: 2, name: '设计分析', en: 'diagnose',  icon: 'layers' },
+  { idx: 3, name: '概念方向', en: 'concept',   icon: 'lightbulb' },
+  { idx: 4, name: '线框图',   en: 'wireframe', icon: 'layout' },
+  { idx: 5, name: '高保真',   en: 'hi-fi',     icon: 'smartphone' },
+  { idx: 6, name: '标注交付', en: 'handoff',   icon: 'code' },
+  { idx: 7, name: '总结',     en: 'summary',   icon: 'check-circle' },
 ]
 
-const savedProjects = loadProjects()
-const allProjects = savedProjects.length > 0
-  ? [DEMO_PROJECT, ...savedProjects]
-  : [DEMO_PROJECT]
+// ── Init global DPData ────────────────────────────────────────────────────────
 
 window.DPData = {
-  projects: allProjects,
+  projects: [DEMO_PROJECT],
   steps: STEPS_META,
   step1: null, step2: null, step3: null, step4: null,
   step5: null, step6: null, step7: null,
@@ -73,17 +96,10 @@ window.dpLoadWorkflowState = () => {
 window.dpSaveWorkflowState = (state: any) => {
   try { localStorage.setItem('dp_wf_state_v2', JSON.stringify(state)) } catch {}
 }
-window.dpLoadProjects = loadProjects
-window.dpSaveProjects = saveProjects
 
-// ── Tweaks defaults ───────────────────────────────────────────────────────────
-const DEFAULTS = {
-  theme: 'light',
-  density: 'comfortable',
-  font: 'sans',
-  accent: 'orange',
-  chatOpen: false,
-}
+// ── Tweaks ────────────────────────────────────────────────────────────────────
+
+const DEFAULTS = { theme: 'light', density: 'comfortable', font: 'sans', accent: 'orange', chatOpen: false }
 
 const ACCENT_PALETTES: Record<string, { light: [string, string]; swatch: string }> = {
   orange: { light: ['#cc785c', '#b8654a'], swatch: '#cc785c' },
@@ -96,62 +112,97 @@ const SWATCH_TO_ACCENT = Object.fromEntries(
 )
 
 // ── App ───────────────────────────────────────────────────────────────────────
+
 const App = () => {
   const [t, setTweak] = useTweaks(DEFAULTS)
   const [route, setRoute] = React.useState<any>({ view: 'home' })
   const [chatOpen, setChatOpen] = React.useState(t.chatOpen)
-  const [projects, setProjects] = React.useState(window.DPData.projects)
+  const [projects, setProjects] = React.useState<any[]>([DEMO_PROJECT])
+  const [loading, setLoading] = React.useState(true)
 
-  // Apply tweaks → root data-attrs and CSS vars
+  // Load projects from API on mount
+  React.useEffect(() => {
+    API.listProjects().then(apiProjects => {
+      const all = [DEMO_PROJECT, ...apiProjects.filter((p: any) => p.id !== 'iphone15')]
+      setProjects(all)
+      window.DPData.projects = all
+    }).catch(() => {
+      // API unavailable — keep demo project
+    }).finally(() => setLoading(false))
+  }, [])
+
+  // Apply tweaks
   React.useEffect(() => {
     document.documentElement.dataset.density = t.density
     document.documentElement.dataset.font = t.font
     const pal = ACCENT_PALETTES[t.accent] || ACCENT_PALETTES.orange
     const [ac, ac2] = pal.light
-    const root = document.documentElement
-    root.style.setProperty('--ac', ac)
-    root.style.setProperty('--ac-2', ac2)
+    document.documentElement.style.setProperty('--ac', ac)
+    document.documentElement.style.setProperty('--ac-2', ac2)
   }, [t.density, t.font, t.accent])
 
   const openProject = (id: string) => {
     const p = projects.find((x: any) => x.id === id)
-    const hasProgress = p && p.currentStep > 0 && p.status !== '草稿'
+    const hasProgress = p && (p.current_step || p.currentStep || 0) > 0 && p.status !== '草稿'
     setRoute({ view: 'workflow', projectId: id, skipKickoff: hasProgress })
   }
 
-  const newProject = () => {
+  const newProject = async () => {
     const id = 'proj_' + Date.now()
     const newP = {
-      id,
-      title: '新设计项目',
-      product: '',
-      targetUser: '',
-      scenario: '',
-      style: '通用风格',
-      cover: 'new',
-      currentStep: 0,
-      maxStep: 5,
-      direction: null,
-      updatedAt: '刚刚',
-      collaborators: [],
-      status: '草稿',
-      tag: '新建',
+      id, title: '新设计项目', product: '', target_user: '', scenario: '',
+      style: '通用风格', cover: 'new', current_step: 0, max_step: 5,
+      direction: null, updatedAt: '刚刚', collaborators: [], status: '草稿', tag: '新建',
     }
-    window.DPData.projects = [...projects, newP]
-    setProjects(window.DPData.projects)
+    // Optimistic update — add to UI immediately
+    const withNew = [...projects, newP]
+    setProjects(withNew)
+    window.DPData.projects = withNew
     setRoute({ view: 'workflow', projectId: id, skipKickoff: false })
+    // Persist to API in background
+    try {
+      const saved = await API.createProject({
+        product: '', target_user: '', scenario: '',
+        title: '新设计项目', style: '通用风格', cover: 'new',
+        status: '草稿', tag: '新建',
+      })
+      // Replace temp project with real one from server (keeps same UI project by id override)
+      setProjects(prev => prev.map(p => p.id === id ? { ...newP, ...saved } : p))
+    } catch (e) {
+      console.warn('Failed to save project to API:', e)
+    }
   }
 
-  const onProjectUpdate = (id: string, updates: any) => {
-    setProjects((prev: any[]) => {
-      const next = prev.map(p => p.id === id ? { ...p, ...updates } : p)
+  const onProjectUpdate = async (id: string, updates: any) => {
+    // Normalize field names (frontend uses camelCase, API uses snake_case)
+    const normalized = {
+      ...updates,
+      current_step: updates.currentStep ?? updates.current_step,
+      target_user: updates.targetUser ?? updates.target_user,
+      max_step: updates.maxStep ?? updates.max_step,
+    }
+    setProjects(prev => {
+      const next = prev.map(p => p.id === id ? { ...p, ...updates, ...normalized } : p)
       window.DPData.projects = next
-      window.dpSaveProjects(next.filter((p: any) => p.id !== 'iphone15'))
       return next
     })
+    // Skip API update for demo project
+    if (id !== 'iphone15') {
+      try {
+        await API.updateProject(id, normalized)
+      } catch (e) {
+        console.warn('Failed to sync project update:', e)
+      }
+    }
   }
 
-  const goHome = () => setRoute({ view: 'home' })
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--tx-4)', fontSize: 14 }}>
+        加载中…
+      </div>
+    )
+  }
 
   return (
     <>
@@ -159,7 +210,8 @@ const App = () => {
         ? <Home onOpenProject={openProject} onNewProject={newProject}
             projects={projects} setProjects={setProjects} />
         : <Workflow projectId={route.projectId} skipKickoff={route.skipKickoff}
-            onBack={goHome} onProjectUpdate={onProjectUpdate}
+            onBack={() => setRoute({ view: 'home' })}
+            onProjectUpdate={onProjectUpdate}
             chatOpen={chatOpen} setChatOpen={setChatOpen} />
       }
 
@@ -173,25 +225,14 @@ const App = () => {
           />
         </TweakSection>
         <TweakSection label="排版">
-          <TweakRadio
-            label="字体"
-            value={t.font}
-            onChange={(v: string) => setTweak('font', v)}
-            options={[{ value: 'sans', label: 'Sans' }, { value: 'serif', label: 'Serif' }]}
-          />
-          <TweakRadio
-            label="密度"
-            value={t.density}
-            onChange={(v: string) => setTweak('density', v)}
-            options={[{ value: 'compact', label: '紧凑' }, { value: 'comfortable', label: '舒适' }]}
-          />
+          <TweakRadio label="字体" value={t.font} onChange={(v: string) => setTweak('font', v)}
+            options={[{ value: 'sans', label: 'Sans' }, { value: 'serif', label: 'Serif' }]} />
+          <TweakRadio label="密度" value={t.density} onChange={(v: string) => setTweak('density', v)}
+            options={[{ value: 'compact', label: '紧凑' }, { value: 'comfortable', label: '舒适' }]} />
         </TweakSection>
         <TweakSection label="布局">
-          <TweakToggle
-            label="AI 协作面板"
-            value={chatOpen}
-            onChange={(v: boolean) => { setChatOpen(v); setTweak('chatOpen', v) }}
-          />
+          <TweakToggle label="AI 协作面板" value={chatOpen}
+            onChange={(v: boolean) => { setChatOpen(v); setTweak('chatOpen', v) }} />
         </TweakSection>
         <TweakSection label="跳转">
           <TweakButton label="回到项目列表" onClick={() => setRoute({ view: 'home' })} />

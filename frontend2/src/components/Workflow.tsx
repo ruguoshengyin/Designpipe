@@ -275,7 +275,133 @@ export const Workflow: React.FC<WorkflowProps> = ({
     })
   }
 
+  // ── generateForStep: delegates to /api/generate for real projects ────────────
   const generateForStep = async (step: number) => {
+    const isDemo = projectId === 'iphone15'
+    if (!isDemo) {
+      return _generateViaAPI(step)
+    }
+    // Demo project: silently skip (already has pre-loaded data)
+  }
+
+  const _generateViaAPI = async (step: number) => {
+    const overlayLabels: Record<number, string> = {
+      1: '设计分析中…', 2: '概念方向生成中…', 3: '高保真设计稿生成中…', 4: '交付文档生成中…',
+    }
+    setRunningStep(step)
+    setErrorMsg(null)
+    setGenLabel(overlayLabels[step] || '')
+    setProgressMsg(`正在生成内容…`)
+
+    try {
+      // For step 1: first save research data (step 0) to DB
+      if (step === 1) {
+        const step1Data = (window as any).DPData.step1
+        if (step1Data) {
+          await fetch(`/api/projects/${projectId}/steps/0`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data_type: 'json', content: JSON.stringify(step1Data) }),
+          })
+        }
+      }
+
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
+          step,
+          direction: chosenDirection,
+          image: (window as any).DPData.uploadedImage,
+          qa_context: buildQAContext(),
+        }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n'); buf = lines.pop()!
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const evt = JSON.parse(line.slice(6))
+
+            if (evt.progress) {
+              setProgressMsg(evt.progress)
+
+            } else if (evt.error) {
+              throw new Error(evt.error)
+
+            } else if (evt.phase_done === 'diagnose') {
+              // Step 1 result: design analysis JSON
+              ;(window as any).DPData.step2 = { ...(window as any).DPData.step2, ...evt.data }
+              setContentVersion(v => v + 1)
+
+            } else if (evt.phase_done === 'page_type') {
+              ;(window as any).DPData.pageType = evt.data
+
+            } else if (evt.phase_done === 'concept') {
+              // Step 2 phase 1: concept directions
+              ;(window as any).DPData.step4 = { ...(window as any).DPData.step4, ...evt.data }
+              setContentVersion(v => v + 1)
+
+            } else if (typeof evt.phase_done === 'string' && evt.phase_done.startsWith('wireframe_')) {
+              // Step 2 phase 2-4: wireframe for each direction
+              const key = evt.phase_done.replace('wireframe_', '')
+              const dirs = (window as any).DPData.step4?.directions || []
+              const d = dirs.find((x: any) => x.key === key)
+              if (d) {
+                d.wireframeHTML = evt.data.html
+                d.wireframeSummary = evt.data.summary
+              }
+              setContentVersion(v => v + 1)
+
+            } else if (evt.phase_done === 'decompose') {
+              ;(window as any).DPData._strategyModules = evt.data
+
+            } else if (evt.phase_done === 'handoff') {
+              ;(window as any).DPData.step7 = { ...(window as any).DPData.step7, ...evt.data }
+              setContentVersion(v => v + 1)
+
+            } else if (evt.done) {
+              // Generation complete — load saved result from API
+              if (step === 3) {
+                const r = await fetch(`/api/projects/${projectId}/steps/3`)
+                if (r.ok) {
+                  const { content } = await r.json()
+                  ;(window as any).DPData.step6 = { html: content }
+                  setContentVersion(v => v + 1)
+                }
+              }
+            }
+          } catch (e: any) {
+            if (e.message) throw e
+          }
+        }
+      }
+    } catch (e: any) {
+      const isQuota = e.code === 'insufficient_quota' || (e.message || '').includes('配额')
+      if (isQuota) {
+        setErrorMsg('__QUOTA__')
+      } else {
+        setErrorMsg(`AI 生成失败：${e.message || '网络错误，请检查后端服务是否运行'}`)
+      }
+    } finally {
+      setProgressMsg(null)
+      setGenLabel('')
+      setRunningStep(null)
+      setContentVersion(v => v + 1)
+    }
+  }
+
+  const _generateForStep_legacy = async (step: number) => {
     const s1 = (window as any).DPData.step1 || {}
     const s2 = (window as any).DPData.step2 || {}
     const brief = `分析目标：${s1.objective || ''}\n设计输入：${(s1.inputs || []).slice(0, 3).join('；')}`
@@ -746,7 +872,7 @@ ${brief}
       setGenLabel('')
       setRunningStep(null)
       setContentVersion(v => v + 1)
-      ;(window as any).dpSaveCache()
+      ;(window as any).dpSaveWorkflowState({ currentStep, completedStep, chosenDirection })
     }
   }
 
