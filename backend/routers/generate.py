@@ -460,6 +460,22 @@ async def _orchestrate(
             "  ③ 不要使用 <a href> 跳转，所有导航只用 dpShow / dpBack\n"
             "  ④ 每个屏幕都要有完整的 status-bar + nav-bar + 页面内容 + 底部 Tab bar（若有）\n"
             "  ⑤ 所有屏幕视觉风格、色彩规范必须与 s1 保持一致\n\n"
+            "▓▓▓▓▓ ⚡ 图标规范（Lucide Icons · 转转强弱标准）▓▓▓▓▓\n"
+            "必须使用 Lucide 开源图标库，在 <head> 内引入 CDN：\n"
+            "<script src=\"https://unpkg.com/lucide@latest/dist/umd/lucide.min.js\"></script>\n"
+            "用法：<i data-lucide=\"icon-name\"></i>，在 </body> 前调用 lucide.createIcons();\n\n"
+            "【转转图标强弱规范】\n"
+            "强（stroke-width:2 · 主操作/强调/必要信息）\n"
+            "  - 导航返回箭头（chevron-left）· nav-bar 右侧操作（share-2 / more-horizontal）\n"
+            "  - 主 CTA 按钮内图标 · 底部 Tab bar 当前选中项\n"
+            "  - 错误/警告提示（alert-circle · x-circle）\n"
+            "弱（stroke-width:1.5 · 辅助/次级/装饰）\n"
+            "  - 底部 Tab bar 未选中项 · 列表行末箭头（chevron-right）\n"
+            "  - 图片占位（image）· 表单图标（search / calendar / map-pin）\n"
+            "  - 卡片内辅助图标 · 标签/chip 前置图标\n"
+            "尺寸规则：Tab bar 22px · Nav bar 操作 20px · 列表行内 16px · 表单内 14px\n"
+            "颜色规则：主操作图标跟随父元素文字色；Tab 选中 #FF0F27；Tab 未选中 #999999；辅助图标 #BBBBBB\n"
+            "禁止：emoji 代替图标 · 外部图片 src · 非 Lucide 的其他 SVG 图标库\n\n"
             "只返回完整 HTML，从 <!DOCTYPE html> 开始，禁止 markdown 代码块，禁止任何说明文字。"
         )
 
@@ -496,6 +512,7 @@ async def _orchestrate(
 - 必须保留所有按钮上的 onclick="dpShow(...)" / onclick="dpBack()" 绑定
 - 所有屏幕仍是 390×844、overflow:hidden
 - 沿用页面已有的转转视觉风格，不要引入新风格
+- 图标必须使用 Lucide（<i data-lucide="...">），保留 <head> 内的 Lucide CDN script 标签和 </body> 前的 lucide.createIcons() 调用
 - 直接返回完整HTML，从<!DOCTYPE html>开始，禁止markdown代码块、禁止任何说明文字
 
 【待核对HTML】

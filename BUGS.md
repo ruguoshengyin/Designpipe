@@ -178,4 +178,19 @@
 
 ---
 
+## FEAT-002 · 高保真图标改用 Lucide Icons · 转转强弱规范
+**实现时间**：2026-05-24  
+**需求**：高保真原型图标从 ad-hoc 内联 SVG 改为 Lucide 开源图标库，强弱参考转转规范  
+**方案**：在 hi-fi 生成 prompt 末尾追加图标规范章节  
+- `<head>` 引入 `https://unpkg.com/lucide@latest/dist/umd/lucide.min.js`  
+- 用法：`<i data-lucide="icon-name"></i>` + `</body>` 前调用 `lucide.createIcons()`  
+- **强（stroke-width:2）**：返回箭头、主 CTA 内图标、Tab 选中项、错误提示  
+- **弱（stroke-width:1.5）**：Tab 未选中、列表箭头、表单图标、装饰图标  
+- 尺寸：Tab bar 22px · Nav bar 20px · 列表行 16px · 表单内 14px  
+- 颜色：Tab 选中 #FF0F27 · Tab 未选中 #999999 · 辅助图标 #BBBBBB  
+- 验证 pass 同步约束：保留 Lucide CDN 和 createIcons() 调用  
+**文件**：`backend/routers/generate.py`
+
+---
+
 _最后更新：2026-05-24_
