@@ -106,6 +106,18 @@ Tab bar：60px（不是80px）
 ✗ 渐变 / 毛玻璃 / backdrop-filter
 ✗ Tab bar height > 60px（不是80px）
 ✗ 价格用红色（价格 ¥ 和数字都必须 #111111）
+
+### 9. 颜色最高优先级约束——禁止蓝色系
+⚠️ 转转 App 没有蓝色交互体系。以下为绝对禁止：
+✗ 任何 blue / #007AFF / #4169E1 / #1677FF / #0066FF 等蓝色系色值
+✗ 用蓝色作为按钮文字色、图标色、chip 选中色、hover 色
+✗ 操作按钮/功能 chip 背景为蓝色（必须 #F5F5F5 或 #FFF2F2）
+
+【正确替代方案】
+· 次级操作按钮（智能分组/批量编辑等）→ bg:#F5F5F5  text:#111  icon:#666
+· 主 CTA 按钮 → bg:#FF0F27  text:#fff
+· 选中/激活态 → text:#FF0F27 或 border:1px solid #FF0F27
+· 图标默认色 → #999 或 #666，绝对不用蓝色
 `;
 
 export function DPPostProcessHtml(rawHtml: string): string {

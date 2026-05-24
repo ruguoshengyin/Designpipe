@@ -193,4 +193,16 @@
 
 ---
 
+## BUG-015 · 高保真配色出现蓝色——违反转转规范
+**发现时间**：用户测试  
+**现象**：生成的高保真原型中功能按钮（智能分组/自动排序/批量编辑）使用蓝色文字+蓝色图标+蓝色背景，不符合转转设计规范  
+**根因**：AI 默认使用 iOS/Material 系统蓝（#007AFF/#4169E1）作为次级操作色；设计规范里没有明确禁止蓝色，AI 推断不出"转转无蓝色体系"  
+**修法**  
+- `backend/utils/design_spec.py`：新增 §7b 「绝对禁止蓝色」条目，列出所有常见蓝色值，并给出正确替代配色速查表  
+- `frontend2/src/constants/designSpec.ts`：同步新增 §9 颜色最高优先级约束，前端 legacy 路径也受约束  
+- 正确规范：次级功能按钮 → `bg:#F5F5F5 color:#111 icon:#666`；主CTA → `bg:#FF0F27 color:#fff`  
+**文件**：`backend/utils/design_spec.py`, `frontend2/src/constants/designSpec.ts`
+
+---
+
 _最后更新：2026-05-24_
