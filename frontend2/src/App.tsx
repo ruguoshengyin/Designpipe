@@ -88,7 +88,7 @@ window.DPData = {
   steps: STEPS_META,
   step1: null, step2: null, step3: null, step4: null,
   step5: null, step6: null, step7: null,
-  qa: {},
+  qa: [],
   uploadedImage: null,
   pageType: 'detail',
   chosenCompetitors: [],

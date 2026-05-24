@@ -132,7 +132,8 @@ export function looksLikeCode(t: string): boolean {
 }
 
 export function buildQAContext(): string {
-  const qa = ((window as any).DPData?.qa) || [];
+  const raw = ((window as any).DPData?.qa);
+  const qa: any[] = Array.isArray(raw) ? raw : [];
   const lines = qa.filter((q: any) => q.answer && q.answer.trim()).map((q: any) => `· ${q.question}：${q.answer}`);
   return lines.length ? `\n\n【用户补充信息（来自项目问答）】\n${lines.join("\n")}` : "";
 }

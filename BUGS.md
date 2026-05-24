@@ -167,4 +167,15 @@
 
 ---
 
+## BUG-014 · `qa.filter is not a function` 导致高保真生成失败
+**发现时间**：用户测试  
+**现象**：进入高保真步骤时顶部报错 `AI 生成失败：qa.filter is not a function`，高保真 HTML 无法生成，页面也就没有多屏交互结构  
+**根因**：`App.tsx` 中 `window.DPData.qa` 初始化为 `{}`（对象），而 `buildQAContext()` 直接调用 `qa.filter()`（数组方法），类型不匹配抛 TypeError，AI 生成函数在此中断  
+**修法**  
+- `App.tsx`：`qa: {}` 改为 `qa: []`，与 `buildQAContext` 期望的数组类型一致  
+- `utils/ai.ts`：`buildQAContext` 加防御 `Array.isArray(raw) ? raw : []`，以后即使外部误写为对象也不会崩溃  
+**文件**：`frontend2/src/App.tsx`, `frontend2/src/utils/ai.ts`
+
+---
+
 _最后更新：2026-05-24_
