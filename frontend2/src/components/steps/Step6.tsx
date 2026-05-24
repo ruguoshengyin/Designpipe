@@ -229,8 +229,24 @@ export const Step6: React.FC<Step6Props> = ({ project, running, genLabel }) => {
             <Chip tone={interactive ? 'ok' : 'default'} onClick={() => setInteractive(!interactive)} icon={interactive ? 'play' : 'pause'}>
               {interactive ? '可交互' : '已暂停'}
             </Chip>
-            <Btn size="sm" variant="ghost" icon="code">查看代码</Btn>
-            <Btn size="sm" variant="outline" icon="external">新窗口打开</Btn>
+            <Btn size="sm" variant="ghost" icon="code" onClick={() => {
+              const html = window.DPData.step6?.html
+              if (!html) return
+              const escaped = html.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+              const page = `<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"><title>源代码 — 高保真</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#1e1e1e;color:#d4d4d4;font-family:'Menlo','Consolas',monospace;font-size:13px;line-height:1.6;padding:24px}pre{white-space:pre-wrap;word-break:break-all}.toolbar{position:sticky;top:0;background:#2d2d2d;padding:10px 16px;border-radius:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#888}.copy-btn{background:#0e639c;color:#fff;border:none;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-family:inherit}</style></head><body><div class="toolbar"><span>高保真 HTML 源码 · ${html.length.toLocaleString()} 字节</span><button class="copy-btn" onclick="navigator.clipboard.writeText(document.querySelector('pre').textContent).then(()=>{this.textContent='已复制 ✓';setTimeout(()=>this.textContent='复制全部',2000)})">复制全部</button></div><pre>${escaped}</pre></body></html>`
+              const blob = new Blob([page], { type: 'text/html;charset=utf-8' })
+              const url = URL.createObjectURL(blob)
+              window.open(url, '_blank')
+              setTimeout(() => URL.revokeObjectURL(url), 60000)
+            }}>查看代码</Btn>
+            <Btn size="sm" variant="outline" icon="external" onClick={() => {
+              const html = window.DPData.step6?.html
+              if (!html) return
+              const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+              const url = URL.createObjectURL(blob)
+              window.open(url, '_blank')
+              setTimeout(() => URL.revokeObjectURL(url), 60000)
+            }}>新窗口打开</Btn>
             <Btn size="sm" variant="primary" icon="download" onClick={() => triggerDownload(genStep6HTML(), '06-hi-fi.html', 'text/html')}>导出 HTML</Btn>
           </div>
           {/* Lint passes */}
