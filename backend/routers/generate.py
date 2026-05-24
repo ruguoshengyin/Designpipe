@@ -528,6 +528,78 @@ async def _orchestrate(
             except Exception as e:
                 logger.warning("Strategy verification pass failed: %s", e)
 
+        # Phase 4: Quality polish pass — alignment / spacing / typography
+        yield _sse({"progress": "品质精修中：对齐、间距、排版…（约 20 秒）"})
+        polish_prompt = f"""你是转转 App 的高级 UI 审查工程师。下面是一份高保真 HTML 原型，请逐项执行品质精修，直接返回修正后的完整 HTML。
+
+【精修清单——每项必查必改，不合格直接修正，不要只说"已符合"】
+
+① 排版精修
+  - 字号/字重/颜色严格遵守对照表（见下方）：不在表中的组合一律改为最接近的规范值
+  - 标题 13px/600/#111；副标题 12px/400/#666；辅助说明 11px/400/#999；时间戳 10px/400/#BBB
+  - 导航栏标题 18px/700/#111；section标题 16px/700/#111
+  - 价格¥符号 12px/700/#111；价格数字 Akrobat 20px/800/#111（黑色，绝非红色）
+  - 行高：单行标签 1.2，正文 1.5，多行说明 1.7
+  - 所有字体必须是 'PingFang SC'（检查每一处 font-family，消灭 Inter/Roboto/system-ui）
+
+② 间距精修（4pt 基准）
+  - 检查所有 padding/margin/gap，改为最接近的4的倍数（4/8/12/16/20/24/32px）
+  - 页面左右内容边距统一 16px，不得出现 10px/15px/18px/20px 的边距
+  - 卡片内边距 12px（紧凑）或 16px（标准）
+  - 相邻元素间距：图标-文字 8px；标签间 4-8px；卡片间 0（用分割线代替）
+
+③ 圆角精修
+  - 主按钮/CTA：999px pill
+  - 卡片容器：16px
+  - chip筛选：6px（不是4px，不是8px）
+  - 卖点标签（次日达/已验机）：1px（极小，不是4px）
+  - 输入框/搜索框：999px pill
+  - 图片占位：8px
+
+④ 颜色精修
+  - 消灭所有蓝色（#007AFF/#4169E1/#1677FF 等），替换：次级操作→#F5F5F5底#111字，链接→#42A0FF仅文字
+  - 价格数字颜色强制为 #111111（黑色），不得为任何红色
+  - 次级功能按钮（智能分组/批量编辑/自动排序等）：bg:#F5F5F5 color:#111 图标:#666
+  - Lucide 图标颜色必须显式写在 style 属性中，不能依赖 color 继承
+
+⑤ 对齐精修
+  - 每个 flex 容器必须有明确的 align-items（center/flex-start/flex-end/stretch）
+  - 文字与图标垂直居中：用 display:flex; align-items:center; gap:Npx 替代 margin 方案
+  - 卡片内各行之间的间距统一（用 gap 或 margin-top，不要混用）
+  - 底部操作栏：position:absolute; bottom:0（或 position:fixed，但在多屏结构中用absolute）
+
+⑥ 组件尺寸精修
+  - 所有按钮高度：大按钮48px / 中按钮40px / 小按钮32px
+  - Chip高度：26px；内边距：0 10px
+  - Tab bar高度：60px；底部padding 8px保护home indicator区
+  - 导航栏内容区：44px（状态栏44px+导航44px=总88px）
+  - 最小触摸区：44×44px（小按钮用 min-width/min-height 保证）
+
+⑦ 多屏一致性
+  - 检查所有 .dp-screen：同一元素（nav-bar/tab-bar/status-bar）在各屏幕高度、间距、颜色必须一致
+  - 保留所有 dpShow/dpBack onclick 绑定，不得删除
+  - 保留 Lucide CDN 和 lucide.createIcons() 调用
+
+【禁止事项（修精时不得破坏）】
+  - 不得删除任何业务模块或交互功能
+  - 不得改变页面信息架构（只改视觉细节）
+  - 不得引入新的颜色或风格
+
+【待精修 HTML】
+{final_html}
+
+直接返回完整修正后的 HTML，从 <!DOCTYPE html> 开始，禁止 markdown，禁止说明文字。"""
+        try:
+            polished_chunks: list[str] = []
+            async for chunk in _stream_text(polish_prompt, None, max_tokens=16000):
+                polished_chunks.append(chunk)
+                yield _sse({"delta": chunk})
+            polished = _extract_html("".join(polished_chunks))
+            if polished and len(polished) > 500:
+                final_html = polished
+        except Exception as e:
+            logger.warning("Quality polish pass failed: %s", e)
+
         # Inject dp-reset and save
         final_html = _inject_dp_reset(final_html)
         await step_service.save_step(pid, 3, "html", final_html, db)

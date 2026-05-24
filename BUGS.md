@@ -205,4 +205,27 @@
 
 ---
 
+## FEAT-003 · 高保真品质精修 pass + design spec v1.2
+**实现时间**：2026-05-24  
+**需求**：高保真输出对齐/尺寸/排版不符合可交付标准  
+**方案**  
+1. **design_spec.py 全面升级至 v1.2**（集成 zhuanzhuan-design skill token 系统）  
+   - 完整字号/字重/颜色对照表（10~22px 共12档，每档明确 weight+color）  
+   - 4pt 间距系统（4/8/12/16/20/24/32px）  
+   - 精确圆角表（按钮pill / 卡片16px / chip 6px / 卖点标签1px / 输入框pill）  
+   - 组件高度速查（按钮 48/40/32px；chip 26px；nav 88px；tab 60px；操作栏 64/80px）  
+   - 阴影规范（0 1px 2px + 0 8px 24px rgba(17,17,17,.04)）  
+   - HTML 模板（横版商品卡、次级按钮组、主CTA）  
+2. **新增 Phase 4：品质精修 pass**（在策略核查 pass 之后运行）  
+   - ① 排版：字号/字重/颜色强制对齐规范，消灭 Inter/Roboto  
+   - ② 间距：所有 padding/margin/gap 改为4的倍数，左右边距统一16px  
+   - ③ 圆角：按组件类型强制修正  
+   - ④ 颜色：消灭蓝色，价格强制#111，图标颜色显式设置  
+   - ⑤ 对齐：flex容器加 align-items，文字与图标垂直居中  
+   - ⑥ 组件尺寸：按钮/chip/nav/tab bar 精确高度  
+   - ⑦ 多屏一致性：各屏导航/tab bar 高度颜色一致，保留交互绑定  
+**文件**：`backend/utils/design_spec.py`, `backend/routers/generate.py`
+
+---
+
 _最后更新：2026-05-24_
