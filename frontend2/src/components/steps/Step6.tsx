@@ -1,8 +1,7 @@
 import React from 'react'
 import { Btn, Chip, Card, Icon } from '../ui'
 import { Generating } from './Generating'
-import { RightRail, RailSection, PrevList, PrevStepHint } from './shared/RightRail'
-import { ArtifactLink } from './shared/ArtifactLink'
+import { PrevStepHint } from './shared/RightRail'
 import { triggerDownload, genStep6HTML } from '../../utils/download'
 
 // ── ZZHiFiPage ────────────────────────────────────────────────────────────────
@@ -205,10 +204,10 @@ export const Step6: React.FC<Step6Props> = ({ project, running, genLabel }) => {
   const [interactive, setInteractive] = React.useState(true)
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: 20, alignItems: 'flex-start', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'relative' }}>
       {running && <Generating label={genLabel || '重新生成高保真稿…'} />}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <PrevStepHint label="基于 Step 03 概念方向 + 线框图 · 已通过 Lint 检查" />
 
         {/* Toolbar */}
@@ -336,28 +335,6 @@ export const Step6: React.FC<Step6Props> = ({ project, running, genLabel }) => {
         </Card>
       </div>
 
-      <RightRail>
-        <RailSection title="此版本基于" defaultOpen={false}>
-          <PrevList items={[
-            '方向 B「能力增强」',
-            '保障锚点卡片级',
-            '5 字段同屏：型号 / 成色 / 容量 / 价格 / 保障',
-            '筛选 chip 持久可见、可撤销',
-            '对比抽屉 V1 仅入口埋点',
-          ]} />
-        </RailSection>
-        <RailSection title="本步骤产物" defaultOpen={false}>
-          <ArtifactLink icon="code" label="06-hi-fi.html" onClick={() => triggerDownload(genStep6HTML(), '06-hi-fi.html', 'text/html')} />
-        </RailSection>
-        <RailSection title="可在 Tweaks 调" defaultOpen={true}>
-          <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: 'var(--tx-3)', lineHeight: 1.7 }}>
-            <li>风格切换：电商红 / 编辑黑</li>
-            <li>价格视觉权重</li>
-            <li>保障锚点位置（角标 / 行末）</li>
-            <li>对比抽屉默认显隐</li>
-          </ul>
-        </RailSection>
-      </RightRail>
     </div>
   )
 }
