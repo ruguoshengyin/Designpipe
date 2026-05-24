@@ -141,4 +141,30 @@
 
 ---
 
-_最后更新：2026-05-23_
+## BUG-012 · 点击有进度的项目后页面空白
+**发现时间**：用户测试（重启后打开已有项目）  
+**现象**：点击首页已有进度的项目卡片，进入 Workflow 后页面一片空白（React 崩溃白屏）  
+**根因**：两个叠加问题  
+1. `Step7` 在 `data = null` 时直接读 `data.background` → TypeError，React 树崩溃白屏  
+2. 重启后 localStorage 缓存丢失（用户清除过 / 换设备），Workflow 不从 API 拉取已保存的 step 数据，DPData 全空  
+**修法**  
+- `Step7` 加 null guard：`data = _data || {}`，无数据时渲染"交付总结生成中"占位  
+- `Workflow` 新增 `useEffect`：`skipKickoff=true` 且无 localStorage 缓存时，并行 `fetch /api/projects/:id/steps/0~4` 把 DB 里的内容恢复到 DPData（仅补空值，不覆盖已有内容）  
+**文件**：`frontend2/src/components/steps/Step7.tsx`, `frontend2/src/components/Workflow.tsx`
+
+---
+
+## BUG-013 · "单独打开"按钮无效——重新打开了同一页面
+**发现时间**：用户测试  
+**现象**：点击步骤头部的"单独打开"按钮，新标签页打开的是 Workflow 页面本身，与直接复制 URL 没有区别，高保真原型无法独立预览  
+**根因**：`onClick` 写死为 `window.open(window.location.href, '_blank')`，没有区分步骤类型，也没有取对应内容  
+**修法**：改为按当前步骤分支处理  
+- Step 4（高保真）：取 `DPData.step6.html`，创建 Blob URL 在新标签页打开完整可交互 HTML 原型  
+- Step 3（概念·线框）：取选定方向的 `wireframeHTML`，同样 Blob URL 打开  
+- 其他步骤：把当前步骤区域的 `innerText` 包进简单 HTML 阅读页后 Blob URL 打开  
+- Blob URL 在 60 秒后自动 `revokeObjectURL` 释放内存  
+**文件**：`frontend2/src/components/Workflow.tsx`
+
+---
+
+_最后更新：2026-05-24_

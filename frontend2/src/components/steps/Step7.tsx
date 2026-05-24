@@ -33,8 +33,18 @@ interface Step7Props {
   direction?: string
 }
 
-export const Step7: React.FC<Step7Props> = ({ data, project, direction }) => {
+export const Step7: React.FC<Step7Props> = ({ data: _data, project, direction }) => {
+  const data = _data || {}
   const fileIcons: Record<string, string> = { md: 'doc', svg: 'doc', html: 'code', pdf: 'doc' }
+
+  if (!_data || !data.background) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, color: 'var(--tx-4)', fontSize: 13 }}>
+        交付总结生成中，请稍候…
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: 20, alignItems: 'flex-start' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 22, minWidth: 0 }}>

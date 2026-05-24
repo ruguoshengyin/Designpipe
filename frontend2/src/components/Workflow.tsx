@@ -84,6 +84,29 @@ export const Workflow: React.FC<WorkflowProps> = ({
   const [genLabel, setGenLabel] = React.useState('')
   const scrollRef = React.useRef<HTMLDivElement>(null)
 
+  // Restore step data from API when no localStorage cache exists (e.g. after backend restart)
+  React.useEffect(() => {
+    if (!skipKickoff) return          // Draft project — nothing to restore
+    if (projectId === 'iphone15') return  // Demo project — uses hardcoded data
+    if (_cachedWF) return             // localStorage already has everything
+
+    const dp = (window as any).DPData
+    const pid = projectId
+    const get = (n: number) => fetch(`/api/projects/${pid}/steps/${n}`).then(r => r.ok ? r.json() : null).catch(() => null)
+
+    Promise.allSettled([get(0), get(1), get(2), get(3), get(4)]).then(results => {
+      const [s0, s1, s2, s3, s4] = results.map(r => r.status === 'fulfilled' ? r.value : null)
+      let changed = false
+      if (s0?.content && !dp.step1) { try { dp.step1 = JSON.parse(s0.content); changed = true } catch {} }
+      if (s1?.content && !dp.step2?.diagnosis) { try { dp.step2 = { ...dp.step2, ...JSON.parse(s1.content) }; changed = true } catch {} }
+      if (s2?.content && !dp.step4?.directions?.length) { try { dp.step4 = { ...dp.step4, ...JSON.parse(s2.content) }; changed = true } catch {} }
+      if (s3?.content && !dp.step6?.html) { dp.step6 = { html: s3.content }; changed = true }
+      if (s4?.content && !dp.step7?.background) { try { dp.step7 = { ...dp.step7, ...JSON.parse(s4.content) }; changed = true } catch {} }
+      if (changed) setContentVersion(v => v + 1)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
   // Listen for chat close event
   React.useEffect(() => {
     const handler = () => setChatOpen(false)
@@ -1045,7 +1068,37 @@ ${brief}
                 {runningStep === currentStep ? '生成中…' : '重新生成'}
               </Btn>
               <div style={{ width: 1, height: 16, background: 'var(--bd-1)', margin: '0 4px' }} />
-              <Btn variant="ghost" size="sm" icon="external" title="单独打开" onClick={() => window.open(window.location.href, '_blank')}>单独打开</Btn>
+              <Btn variant="ghost" size="sm" icon="external" title="单独打开" onClick={() => {
+                const dp = (window as any).DPData
+                // Step 4 = 高保真：直接打开 HTML 原型
+                if (currentStep === 4 && dp.step6?.html) {
+                  const blob = new Blob([dp.step6.html], { type: 'text/html;charset=utf-8' })
+                  const url = URL.createObjectURL(blob)
+                  window.open(url, '_blank')
+                  setTimeout(() => URL.revokeObjectURL(url), 60000)
+                  return
+                }
+                // Step 3 = 概念·线框：打开选定方向的线框图
+                if (currentStep === 3) {
+                  const dirs = dp.step4?.directions || []
+                  const dir = dirs.find((d: any) => d.key === chosenDirection) || dirs[0]
+                  if (dir?.wireframeHTML) {
+                    const blob = new Blob([dir.wireframeHTML], { type: 'text/html;charset=utf-8' })
+                    const url = URL.createObjectURL(blob)
+                    window.open(url, '_blank')
+                    setTimeout(() => URL.revokeObjectURL(url), 60000)
+                    return
+                  }
+                }
+                // 其他步骤：打开纯文字内容页
+                const el = scrollRef.current
+                const text = el ? el.innerText : '（暂无内容）'
+                const html = `<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"><title>${step.name} — ${project.title}</title><style>body{font-family:-apple-system,sans-serif;max-width:800px;margin:40px auto;padding:0 24px;line-height:1.7;color:#111}h1{font-size:20px;font-weight:600;margin-bottom:8px}pre{white-space:pre-wrap;font-size:14px}</style></head><body><h1>${step.name}</h1><p style="color:#999;font-size:13px;margin-bottom:24px">${project.title}</p><pre>${text}</pre></body></html>`
+                const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+                const url = URL.createObjectURL(blob)
+                window.open(url, '_blank')
+                setTimeout(() => URL.revokeObjectURL(url), 60000)
+              }}>单独打开</Btn>
               <Btn variant="ghost" size="sm" icon="download" title="下载内容" onClick={() => {
                 const el = scrollRef.current
                 const text = el ? el.innerText : ''
