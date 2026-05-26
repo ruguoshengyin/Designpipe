@@ -21,10 +21,11 @@ interface Project {
 interface ProjectCardProps {
   project: Project
   onOpen: () => void
+  onDelete?: () => void
   index: number
 }
 
-export const ProjectCard: React.FC<ProjectCardProps> = ({ project: p, onOpen, index }) => {
+export const ProjectCard: React.FC<ProjectCardProps> = ({ project: p, onOpen, onDelete, index }) => {
   const [hovered, setHovered] = React.useState(false)
   const isExample = p.id === 'iphone15'
 
@@ -44,8 +45,40 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project: p, onOpen, in
         transition: 'border-color 0.2s ease, transform 0.2s ease',
         padding: '20px',
         display: 'flex', flexDirection: 'column', gap: 16,
+        position: 'relative',
       }}
     >
+      {/* Delete button — shown on hover, hidden for example project */}
+      {!isExample && onDelete && (
+        <button
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          style={{
+            position: 'absolute', top: 14, right: 14,
+            width: 26, height: 26, borderRadius: 7,
+            border: 'none', background: 'rgba(0,0,0,0.05)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', color: 'var(--tx-4)',
+            opacity: hovered ? 1 : 0,
+            transform: hovered ? 'scale(1)' : 'scale(0.85)',
+            transition: 'opacity 0.18s ease, transform 0.18s ease, background 0.12s',
+            zIndex: 2,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(0,0,0,0.09)'
+            e.currentTarget.style.color = 'var(--tx-2)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(0,0,0,0.05)'
+            e.currentTarget.style.color = 'var(--tx-4)'
+          }}
+          onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.93)' }}
+          onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
+          title="删除项目"
+        >
+          <Icon name="trash-2" size={13} />
+        </button>
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>

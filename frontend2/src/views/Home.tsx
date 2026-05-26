@@ -13,6 +13,22 @@ interface HomeProps {
 export const Home: React.FC<HomeProps> = ({ onOpenProject, onNewProject, projects, setProjects, creating }) => {
   const [view, setView] = React.useState('grid')
   const [filter, setFilter] = React.useState('all')
+  const [deleteTarget, setDeleteTarget] = React.useState<any>(null)
+  const [deleting, setDeleting] = React.useState(false)
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await fetch(`/api/projects/${deleteTarget.id}`, { method: 'DELETE' })
+      setProjects(projects.filter(p => p.id !== deleteTarget.id))
+      const cached = localStorage.getItem(`dp_wf_v3_${deleteTarget.id}`)
+      if (cached) localStorage.removeItem(`dp_wf_v3_${deleteTarget.id}`)
+    } finally {
+      setDeleting(false)
+      setDeleteTarget(null)
+    }
+  }
 
   React.useEffect(() => {
     const el = document.createElement('style')
@@ -27,6 +43,8 @@ export const Home: React.FC<HomeProps> = ({ onOpenProject, onNewProject, project
         to { opacity: 1; transform: translateY(0); }
       }
       .card-animate { animation: cardIn 0.38s cubic-bezier(0.22,1,0.36,1) both; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes slideUp { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
       .home-v2-root {
         background: var(--bg-1);
         min-height: 100vh;
@@ -55,6 +73,7 @@ export const Home: React.FC<HomeProps> = ({ onOpenProject, onNewProject, project
   })
 
   return (
+    <>
     <div className="home-v2-root">
       <div style={{ padding: '52px 60px 100px', maxWidth: 1360, margin: '0 auto' }}>
 
@@ -253,7 +272,7 @@ export const Home: React.FC<HomeProps> = ({ onOpenProject, onNewProject, project
         {view === 'grid' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
             {filtered.map((p, i) => (
-              <ProjectCard key={p.id} project={p} onOpen={() => onOpenProject(p.id)} index={i} />
+              <ProjectCard key={p.id} project={p} onOpen={() => onOpenProject(p.id)} onDelete={() => setDeleteTarget(p)} index={i} />
             ))}
             <NewProjectCard onClick={onNewProject} loading={creating} />
           </div>
@@ -263,6 +282,113 @@ export const Home: React.FC<HomeProps> = ({ onOpenProject, onNewProject, project
 
       </div>
     </div>
+
+    {/* Delete Confirm Modal */}
+    {deleteTarget && (
+      <div
+        onClick={() => !deleting && setDeleteTarget(null)}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(17,17,17,0.25)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
+          animation: 'fadeIn 0.12s ease',
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            background: 'white',
+            borderRadius: 22,
+            padding: '32px 32px 28px',
+            width: 400,
+            maxWidth: 'calc(100vw - 32px)',
+            boxShadow: '0 0 0 1px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.10)',
+            animation: 'slideUp 0.16s cubic-bezier(0.22,1,0.36,1)',
+          }}
+        >
+          {/* Label */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            background: 'rgba(0,0,0,0.04)', borderRadius: 6,
+            padding: '3px 9px', marginBottom: 20,
+          }}>
+            <Icon name="trash-2" size={11} style={{ color: 'var(--tx-4)' }} />
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--tx-4)', letterSpacing: 0.2 }}>删除项目</span>
+          </div>
+
+          {/* Title */}
+          <div style={{
+            fontSize: 17, fontWeight: 660, color: 'var(--tx-1)',
+            lineHeight: 1.35, letterSpacing: -0.3,
+            marginBottom: 10,
+            overflow: 'hidden', display: '-webkit-box',
+            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+          }}>
+            {deleteTarget.title}
+          </div>
+
+          {/* Description */}
+          <div style={{
+            fontSize: 13, color: 'var(--tx-3)', lineHeight: 1.65,
+            marginBottom: 28,
+            paddingBottom: 28,
+            borderBottom: '1px solid rgba(0,0,0,0.06)',
+          }}>
+            此操作将永久清除该项目的所有设计数据，且无法撤销。
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+              style={{
+                flex: 1, height: 40, borderRadius: 11,
+                border: '1px solid rgba(0,0,0,0.1)', background: 'rgba(0,0,0,0.02)',
+                fontSize: 13.5, fontWeight: 500, color: 'var(--tx-2)',
+                cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'background 0.12s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.02)')}
+            >
+              取消
+            </button>
+            <button
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+              style={{
+                flex: 1, height: 40, borderRadius: 11,
+                border: 'none',
+                background: 'var(--ac)',
+                fontSize: 13.5, fontWeight: 600, color: 'white',
+                cursor: deleting ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                transition: 'opacity 0.12s, transform 0.1s',
+                opacity: deleting ? 0.6 : 1,
+              }}
+              onMouseEnter={e => { if (!deleting) e.currentTarget.style.opacity = '0.88' }}
+              onMouseLeave={e => { if (!deleting) e.currentTarget.style.opacity = '1' }}
+              onMouseDown={e => { if (!deleting) e.currentTarget.style.transform = 'scale(0.98)' }}
+              onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
+            >
+              {deleting ? (
+                <>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.8s linear infinite' }}>
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  </svg>
+                  删除中…
+                </>
+              ) : '确认删除'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 
