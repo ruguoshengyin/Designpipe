@@ -84,13 +84,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project: p, onOpen, on
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
             <div style={{ display: 'flex', gap: 5 }}>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center',
-                padding: '2px 7px', borderRadius: 5,
-                background: 'rgba(0,0,0,0.04)', fontSize: 10.5, fontWeight: 500,
-                color: 'var(--tx-3)',
-              }}>{p.tag}</span>
-              {isExample && (
+              {isExample ? (
                 <span style={{
                   display: 'inline-flex', alignItems: 'center',
                   padding: '2px 7px', borderRadius: 5,
@@ -98,6 +92,13 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project: p, onOpen, on
                   fontSize: 10.5, fontWeight: 600,
                   color: 'var(--ac)',
                 }}>示例</span>
+              ) : (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center',
+                  padding: '2px 7px', borderRadius: 5,
+                  background: 'rgba(0,0,0,0.04)', fontSize: 10.5, fontWeight: 500,
+                  color: 'var(--tx-3)',
+                }}>{p.tag}</span>
               )}
             </div>
             <StatusPill status={p.status} />

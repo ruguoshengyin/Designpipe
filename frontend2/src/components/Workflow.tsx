@@ -430,7 +430,7 @@ export const Workflow: React.FC<WorkflowProps> = ({
         }
       }
     } catch (e: any) {
-      const isQuota = e.code === 'insufficient_quota' || (e.message || '').includes('配额')
+      const isQuota = (e.code || '').includes('quota') || (e.message || '').includes('quota') || (e.message || '').includes('配额')
       if (isQuota) {
         setErrorMsg('__QUOTA__')
       } else {
@@ -875,7 +875,75 @@ img,svg,video,canvas{max-width:100%!important;}
   function isDarkBg(bg){var m=bg.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);if(m){var r=+m[1],g=+m[2],b=+m[3];return r<60&&g<60&&b<60;}return false;}
   function killPhoneChrome(){var maxIter=5;while(maxIter-->0){var first=document.body.firstElementChild;if(!first)break;var s=window.getComputedStyle(first);var br=parseInt(s.borderRadius)||0;var w=first.offsetWidth;var h=first.offsetHeight;if(isDarkBg(s.backgroundColor)&&br>=20&&w>=350&&h>=600&&first.children.length>=1){while(first.firstChild)document.body.insertBefore(first.firstChild,first);first.remove();continue;}if(br>=20&&w>=350&&h>=600&&first.children.length===1){var inner=first.firstElementChild;var is=window.getComputedStyle(inner);if(parseInt(is.borderRadius)>=10){while(first.firstChild)document.body.insertBefore(first.firstChild,first);first.remove();continue;}}break;}document.querySelectorAll('*').forEach(function(el){var s=window.getComputedStyle(el);var r=el.getBoundingClientRect();if(!isDarkBg(s.backgroundColor))return;if(r.top<6&&r.width>=200&&r.height<=12){el.style.display='none';}if(r.bottom>document.body.offsetHeight-30&&r.width>=60&&r.height<=14){el.style.display='none';}});}
   function fixPriceStyle(){var walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null,false);var n;var priceNodes=[];while(n=walker.nextNode()){if(/¥\\s*\\d/.test(n.nodeValue)||/^\\s*\\d{2,}(\\.\\d+)?\\s*$/.test(n.nodeValue)&&n.parentElement&&/¥/.test(n.parentElement.textContent)){priceNodes.push(n);}}priceNodes.forEach(function(node){var p=node.parentElement;if(p){p.style.cssText+=';color:#111111 !important;font-family:"PingFang SC",-apple-system,sans-serif !important;font-weight:700 !important;';var anc=p.parentElement;for(var i=0;i<2&&anc&&anc!==document.body;i++){var cs=window.getComputedStyle(anc).color;if(/(255,\\s*15|255,\\s*72|FF0F27|FF483C)/i.test(cs)){anc.style.color='#111111';}anc=anc.parentElement;}}});}
-  document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('img').forEach(function(img){if(img.src&&img.src.match(/^https?:\\/\\//)){img.onerror=function(){fixImg(this);};if(img.complete&&img.naturalWidth===0)fixImg(img);}else if(!img.src||img.src===''){fixImg(img);}});killPhoneChrome();fixPriceStyle();setTimeout(function(){killPhoneChrome();fixPriceStyle();},50);});
+  function makeInteractive(){
+    /* 1. Chip / tag groups — clicking a chip selects it, deselects siblings */
+    document.querySelectorAll('*').forEach(function(parent){
+      var children=Array.from(parent.children);
+      if(children.length<2||children.length>8)return;
+      var chips=children.filter(function(el){
+        var s=window.getComputedStyle(el);
+        var r=el.getBoundingClientRect();
+        return r.width>20&&r.width<160&&r.height>20&&r.height<56&&
+          (s.borderRadius!=='0px'||s.border!=='0px none rgb(0, 0, 0)')&&
+          (el.tagName==='BUTTON'||el.tagName==='SPAN'||el.tagName==='DIV')&&
+          !el.querySelector('img')&&(el.textContent||'').trim().length>0&&
+          (el.textContent||'').trim().length<20;
+      });
+      if(chips.length===children.length&&chips.length>=2){
+        chips.forEach(function(chip){
+          if(chip.dataset.dpChip)return;
+          chip.dataset.dpChip='1';
+          chip.style.cursor='pointer';
+          chip.addEventListener('click',function(){
+            var active=chip.dataset.dpActive==='1';
+            /* radio-style: deselect all siblings first */
+            chips.forEach(function(c){
+              if(c.dataset.dpOrigBg===undefined)c.dataset.dpOrigBg=c.style.backgroundColor||'';
+              if(c.dataset.dpOrigColor===undefined)c.dataset.dpOrigColor=c.style.color||'';
+              if(c.dataset.dpOrigBorder===undefined)c.dataset.dpOrigBorder=c.style.border||'';
+              c.style.backgroundColor=c.dataset.dpOrigBg;
+              c.style.color=c.dataset.dpOrigColor;
+              c.style.border=c.dataset.dpOrigBorder;
+              c.dataset.dpActive='0';
+            });
+            if(!active){
+              chip.style.backgroundColor='#FF0F27';
+              chip.style.color='#fff';
+              chip.style.border='none';
+              chip.dataset.dpActive='1';
+            }
+          });
+        });
+      }
+    });
+    /* 2. Accordion / collapsible rows — click header to toggle body */
+    document.querySelectorAll('*').forEach(function(el){
+      if(el.dataset.dpAccordion)return;
+      var ch=Array.from(el.children);
+      if(ch.length!==2)return;
+      var header=ch[0],body=ch[1];
+      var hr=header.getBoundingClientRect(),br=body.getBoundingClientRect();
+      if(hr.height<16||hr.height>64||br.height===0)return;
+      var hText=(header.textContent||'').trim();
+      if(hText.length===0||hText.length>40)return;
+      /* check body is "taller" content area */
+      if(br.height<24)return;
+      el.dataset.dpAccordion='1';
+      header.style.cursor='pointer';
+      var open=true;
+      header.addEventListener('click',function(){
+        open=!open;
+        body.style.display=open?'':'none';
+        /* flip chevron if any */
+        var svg=header.querySelector('svg');
+        if(svg)svg.style.transform=open?'':'rotate(180deg)';
+      });
+    });
+    /* 3. Scrollable content area — enable scroll inside iframe */
+    var content=document.querySelector('#content,[id*="content"],[class*="content"],main');
+    if(content){var cs=window.getComputedStyle(content);if(cs.overflow==='hidden'||cs.overflowY==='hidden'){content.style.overflowY='auto';}}
+  }
+  document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('img').forEach(function(img){if(img.src&&img.src.match(/^https?:\\/\\//)){img.onerror=function(){fixImg(this);};if(img.complete&&img.naturalWidth===0)fixImg(img);}else if(!img.src||img.src===''){fixImg(img);}});killPhoneChrome();fixPriceStyle();makeInteractive();setTimeout(function(){killPhoneChrome();fixPriceStyle();makeInteractive();},100);});
 })();
 <\/script>`
 
@@ -904,7 +972,7 @@ ${brief}
       }
     } catch (e: any) {
       setProgressMsg(null)
-      const isQuota = e.code === 'insufficient_quota' || (e.message || '').includes('配额')
+      const isQuota = (e.code || '').includes('quota') || (e.message || '').includes('quota') || (e.message || '').includes('配额')
       if (isQuota) {
         setErrorMsg('__QUOTA__')
       } else {
@@ -1016,7 +1084,19 @@ ${brief}
             currentStep={currentStep!}
             completedStep={completedStep}
             onSelect={(idx: number) => {
-              if (idx <= completedStep || idx === currentStep) {
+              // Allow free navigation to any step that already has content, without regenerating
+              const dp = (window as any).DPData
+              const stepHasContent = (i: number) => {
+                switch (i) {
+                  case 1: return !!(dp.step1?.competitors?.length || dp.step1?.objective)
+                  case 2: return !!dp.step2?.diagnosis
+                  case 3: return !!(dp.step4?.directions?.length)
+                  case 4: return !!dp.step6?.html
+                  case 5: return !!(dp.step7?.background || dp.step7?.decisions?.length)
+                  default: return false
+                }
+              }
+              if (idx <= completedStep || idx === currentStep || stepHasContent(idx)) {
                 setCurrentStep(idx)
                 ;(window as any).dpSaveWorkflowState({ currentStep: idx, completedStep, chosenDirection }, projectId)
               }
@@ -1146,7 +1226,7 @@ ${brief}
             }}>
               <span style={{ fontSize: 18 }}>⚠️</span>
               <span style={{ flex: 1 }}>
-                <strong>API 配额不足</strong>，AI 调用失败。请前往 <strong>apiyi.com</strong> 充值后刷新页面重试。
+                <strong>API 配额不足</strong>，AI 调用失败。请前往 <a href="https://apiyi.com" target="_blank" rel="noopener noreferrer" style={{ color: '#f97316', fontWeight: 600 }}>apiyi.com</a> 充值后刷新页面重试。
               </span>
               <button onClick={() => setErrorMsg(null)} style={{
                 background: 'none', border: 'none', cursor: 'pointer',

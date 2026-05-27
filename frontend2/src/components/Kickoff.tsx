@@ -125,7 +125,7 @@ export const Kickoff: React.FC<KickoffProps> = ({ project, onStart, onBack }) =>
     let qs: any[] = []
     try {
       const q = await callAI(
-        `你是 UX 设计顾问。针对以下项目，生成 3 个最能影响设计决策的澄清问题，只返回 JSON：\n{"questions":[{"id":"q1","question":"问题25字内","type":"choice","options":["选项A","选项B","选项C","不确定"]},{"id":"q2","question":"问题25字内","type":"choice","options":["选项A","选项B","选项C","无特殊要求"]},{"id":"q3","question":"问题25字内","type":"text","placeholder":"可选，输入或留空"}]}\nq1、q2 为单选，q3 为开放文本。\n项目：${brief.product}，目标：${brief.goal}，用户：${brief.targetUser}`
+        `你是 UX 设计顾问。针对以下项目，生成 3 个最能影响设计决策的澄清问题，只返回 JSON：\n{"questions":[{"id":"q1","question":"问题25字内（可多选）","type":"multiselect","options":["选项A","选项B","选项C","选项D","不确定"]},{"id":"q2","question":"问题25字内（可多选）","type":"multiselect","options":["选项A","选项B","选项C","选项D","无特殊要求"]},{"id":"q3","question":"问题25字内","type":"text","placeholder":"可选，输入或留空"}]}\nq1、q2 为多选（multiselect），q3 为开放文本。\n项目：${brief.product}，目标：${brief.goal}，用户：${brief.targetUser}`
       )
       qs = Array.isArray(q.questions) ? q.questions : []
     } catch (e: any) {
@@ -557,27 +557,35 @@ ${briefStr}
                         </div>
                       </div>
                     ) : q.type === 'choice' && Array.isArray(q.options) ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {q.options.map((opt: string, oi: number) => {
-                          const selected = answers[q.id] === opt
-                          return (
-                            <button key={oi} onClick={() => setAnswers(prev => ({
-                              ...prev,
-                              [q.id]: selected ? '' : opt,
-                            }))} style={{
-                              padding: '7px 14px',
-                              borderRadius: 999,
-                              border: selected ? '1.5px solid var(--ac)' : '1.5px solid var(--bd-1)',
-                              background: selected ? 'var(--ac-soft)' : 'var(--bg-2)',
-                              color: selected ? 'var(--ac)' : 'var(--tx-2)',
-                              fontSize: 12.5,
-                              fontWeight: selected ? 600 : 400,
-                              cursor: 'pointer',
-                              fontFamily: 'inherit',
-                              transition: 'all .15s',
-                            }}>{opt}</button>
-                          )
-                        })}
+                      <div>
+                        <div style={{ fontSize: 11.5, color: 'var(--tx-4)', marginBottom: 8 }}>可多选</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {q.options.map((opt: string, oi: number) => {
+                            const sel = Array.isArray(answers[q.id]) ? answers[q.id] : (answers[q.id] ? [answers[q.id]] : [])
+                            const selected = sel.includes(opt)
+                            return (
+                              <button key={oi} onClick={() => setAnswers(prev => {
+                                const cur = Array.isArray(prev[q.id]) ? prev[q.id] : (prev[q.id] ? [prev[q.id]] : [])
+                                return { ...prev, [q.id]: selected ? cur.filter((x: string) => x !== opt) : [...cur, opt] }
+                              })} style={{
+                                padding: '7px 14px',
+                                borderRadius: 999,
+                                border: selected ? '1.5px solid var(--ac)' : '1.5px solid var(--bd-1)',
+                                background: selected ? 'var(--ac-soft)' : 'var(--bg-2)',
+                                color: selected ? 'var(--ac)' : 'var(--tx-2)',
+                                fontSize: 12.5,
+                                fontWeight: selected ? 600 : 400,
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                                transition: 'all .15s',
+                                display: 'flex', alignItems: 'center', gap: 5,
+                              }}>
+                                {selected && <span style={{ fontSize: 11, lineHeight: 1 }}>✓</span>}
+                                {opt}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
                     ) : (
                       <textarea
