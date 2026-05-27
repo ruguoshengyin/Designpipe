@@ -500,7 +500,117 @@ sticky 定位基准：
 
 ---
 
-### 14 · 品质自查清单（生成后必须逐项核对）
+### 14 · 发布 / 表单类页面专用组件参考（直接抄这些片段）
+
+> 适用页面类型：发布商品、填写信息、发起售后、多步骤表单。
+> 这类页面统一用**通栏列表行**，section 间用 8px 灰色分隔块，禁止圆角卡片。
+
+【步骤进度条 Stepper】
+```html
+<div style="padding:12px 20px 16px;background:#fff;">
+  <div style="font-size:11px;font-weight:300;color:#999;margin-bottom:10px;">挂售流程</div>
+  <div style="display:flex;align-items:flex-start;">
+    <!-- 步骤1 当前 -->
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;position:relative;">
+      <div style="width:26px;height:26px;border-radius:50%;background:#FF0007;color:#fff;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;font-family:'PingFang SC',sans-serif;position:relative;z-index:1;">1</div>
+      <div style="font-size:11px;font-weight:400;color:#111;margin-top:6px;font-family:'PingFang SC',sans-serif;">发布商品</div>
+      <!-- 连线（右） -->
+      <div style="position:absolute;top:13px;left:calc(50% + 13px);right:calc(-50% + 13px);height:1px;background:#E8E8E8;"></div>
+    </div>
+    <!-- 步骤2 未到达 -->
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;position:relative;">
+      <div style="width:26px;height:26px;border-radius:50%;background:#F0F0F0;color:#999;font-size:13px;font-weight:400;display:flex;align-items:center;justify-content:center;font-family:'PingFang SC',sans-serif;position:relative;z-index:1;">2</div>
+      <div style="font-size:11px;font-weight:300;color:#999;margin-top:6px;font-family:'PingFang SC',sans-serif;">买家拍下</div>
+      <div style="position:absolute;top:13px;left:calc(50% + 13px);right:calc(-50% + 13px);height:1px;background:#E8E8E8;"></div>
+    </div>
+    <!-- 步骤3 -->
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;position:relative;">
+      <div style="width:26px;height:26px;border-radius:50%;background:#F0F0F0;color:#999;font-size:13px;font-weight:400;display:flex;align-items:center;justify-content:center;font-family:'PingFang SC',sans-serif;position:relative;z-index:1;">3</div>
+      <div style="font-size:11px;font-weight:300;color:#999;margin-top:6px;font-family:'PingFang SC',sans-serif;">查验发货</div>
+      <div style="position:absolute;top:13px;left:calc(50% + 13px);right:calc(-50% + 13px);height:1px;background:#E8E8E8;"></div>
+    </div>
+    <!-- 步骤4 最后，无连线 -->
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;">
+      <div style="width:26px;height:26px;border-radius:50%;background:#F0F0F0;color:#999;font-size:13px;font-weight:400;display:flex;align-items:center;justify-content:center;font-family:'PingFang SC',sans-serif;">4</div>
+      <div style="font-size:11px;font-weight:300;color:#999;margin-top:6px;font-family:'PingFang SC',sans-serif;">签收打款</div>
+    </div>
+  </div>
+</div>
+```
+
+【区块标题行（带计数/操作）】
+```html
+<div style="padding:16px 16px 0;display:flex;align-items:center;justify-content:space-between;">
+  <span style="font-size:16px;font-weight:600;color:#111;font-family:'PingFang SC',sans-serif;">实拍图</span>
+  <span style="font-size:13px;font-weight:400;color:#FF0007;font-family:'PingFang SC',sans-serif;">已选 3/9</span>
+</div>
+<div style="padding:4px 16px 0;font-size:12px;font-weight:300;color:#999;font-family:'PingFang SC',sans-serif;">支持混合选择和拖拽排序</div>
+```
+
+【Tab 切换栏（带下划线指示器）】
+```html
+<div style="display:flex;border-bottom:0.5px solid #F0F0F0;padding:0 4px;margin-top:12px;">
+  <!-- 激活态 -->
+  <div style="padding:10px 16px;font-size:14px;font-weight:500;color:#FF0007;position:relative;cursor:pointer;font-family:'PingFang SC',sans-serif;">
+    拍照
+    <div style="position:absolute;bottom:0;left:16px;right:16px;height:2px;background:#FF0007;border-radius:1px;"></div>
+  </div>
+  <!-- 未激活态 -->
+  <div style="padding:10px 16px;font-size:14px;font-weight:300;color:#999;cursor:pointer;font-family:'PingFang SC',sans-serif;">相册</div>
+  <div style="padding:10px 16px;font-size:14px;font-weight:300;color:#999;cursor:pointer;font-family:'PingFang SC',sans-serif;">历史发布</div>
+</div>
+```
+
+【图片选择格子（3列网格）】
+```html
+<div style="padding:12px 16px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;">
+  <!-- 已选中格：红色边框 + 红色对勾圆 -->
+  <div style="aspect-ratio:1;border-radius:6px;background:#EFEFEF;position:relative;outline:2px solid #FF0007;outline-offset:-1px;cursor:pointer;">
+    <div style="position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:#FF0007;display:flex;align-items:center;justify-content:center;">
+      <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+  </div>
+  <!-- 未选中格：灰色空心圆 -->
+  <div style="aspect-ratio:1;border-radius:6px;background:#EFEFEF;position:relative;cursor:pointer;">
+    <div style="position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.85);border:1.5px solid #CCCCCC;"></div>
+  </div>
+</div>
+```
+
+【通栏表单行（带右箭头）】
+```html
+<!-- 标准选择行 -->
+<div style="padding:0 16px;background:#fff;display:flex;align-items:center;height:52px;border-bottom:0.5px solid #F0F0F0;cursor:pointer;">
+  <span style="font-size:14px;font-weight:400;color:#111;flex:1;font-family:'PingFang SC',sans-serif;">商品分类</span>
+  <span style="font-size:14px;font-weight:300;color:#999;font-family:'PingFang SC',sans-serif;">手机</span>
+  <svg width="7" height="12" viewBox="0 0 7 12" fill="none" style="margin-left:6px;"><path d="M1 1L6 6L1 11" stroke="#BBBBBB" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</div>
+<!-- 价格输入行 -->
+<div style="padding:0 16px;background:#fff;display:flex;align-items:center;height:52px;border-bottom:0.5px solid #F0F0F0;">
+  <span style="font-size:14px;font-weight:400;color:#111;font-family:'PingFang SC',sans-serif;">定价</span>
+  <div style="flex:1;display:flex;align-items:center;justify-content:flex-end;gap:4px;">
+    <span style="font-size:12px;font-weight:500;color:#FF0007;font-family:'PingFang SC',sans-serif;">¥</span>
+    <input type="number" placeholder="请输入" style="border:none;outline:none;font-size:20px;font-weight:600;color:#FF0007;text-align:right;width:120px;font-family:'PingFang SC',sans-serif;background:transparent;">
+  </div>
+</div>
+```
+
+【8px 灰色 Section 分隔块】
+```html
+<div style="height:8px;background:#F8F8F8;"></div>
+```
+
+【底部操作栏（双按钮）】
+```html
+<div style="position:absolute;bottom:0;left:0;right:0;background:#fff;border-top:0.5px solid #F0F0F0;padding:12px 16px 34px;display:flex;gap:12px;">
+  <button style="flex:1;height:44px;border-radius:999px;background:#fff;border:0.5px solid #D8D8D8;font-size:15px;font-weight:400;color:#333;font-family:'PingFang SC',sans-serif;cursor:pointer;">存草稿</button>
+  <button style="flex:2;height:44px;border-radius:999px;background:#FF0007;border:none;font-size:16px;font-weight:500;color:#fff;font-family:'PingFang SC',sans-serif;cursor:pointer;">发布</button>
+</div>
+```
+
+---
+
+### 15 · 品质自查清单（生成后必须逐项核对）
 
 ```
 □ 价格 ¥ 和数字都是 #FF0007（操作红），不是 #111 黑色？
