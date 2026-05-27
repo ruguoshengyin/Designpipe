@@ -24,7 +24,7 @@ node --version      # 应显示 v18.x.x 或更高
 ### 第二步：克隆项目
 
 ```bash
-git clone https://github.com/ruguoshengyin/Designpipe.git
+git clone -b designpipe-2 https://github.com/ruguoshengyin/Designpipe.git
 cd Designpipe
 ```
 
@@ -42,6 +42,7 @@ cp .env.example .env
 ANTHROPIC_API_KEY=你的key
 ```
 
+> 注意：项目在 `designpipe-2` 分支，克隆命令里的 `-b designpipe-2` 不能省略。  
 > API Key 在 apiyi.com 注册后可在控制台获取。
 
 ### 第四步：启动
