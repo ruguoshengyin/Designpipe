@@ -48,6 +48,126 @@ font-family:'PingFang SC',-apple-system,BlinkMacSystemFont,sans-serif!important;
 </style>
 """
 
+# ── In-page secondary-interaction layer (chips / accordion / picker sheet / toast) ──
+# Self-contained: auto-wires by convention + heuristics, injected before </body>.
+# Does NOT touch dpShow/dpBack screen navigation.
+ZZ_INTERACT = """
+<style id="zz-interact-css">
+.zz-seg__item--on,[data-chip].zz-on{
+  border:1px solid #FF0F27!important;color:#FF0F27!important;
+  background:rgba(255,15,39,0.04)!important;}
+[data-acc]{cursor:pointer;}
+.zz-acc-collapsed{max-height:0!important;overflow:hidden!important;
+  padding-top:0!important;padding-bottom:0!important;margin-top:0!important;margin-bottom:0!important;
+  opacity:0;transition:max-height .25s ease,opacity .2s ease,padding .25s ease;}
+.zz-acc-body{transition:max-height .25s ease,opacity .2s ease;overflow:hidden;}
+.zz-acc-arrow{transition:transform .2s ease;}
+.zz-acc-arrow.zz-rot{transform:rotate(180deg);}
+.zz-isheet{position:absolute;left:0;right:0;bottom:0;width:100%;max-height:72%;overflow-y:auto;
+  background:#fff;border-radius:16px 16px 0 0;padding:20px 16px calc(16px + env(safe-area-inset-bottom));
+  transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);z-index:120;}
+.zz-isheet.zz-open{transform:translateY(0);}
+.zz-isheet-mask{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:119;display:none;}
+.zz-isheet-mask.zz-open{display:block;}
+.zz-toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.9);
+  background:rgba(17,17,17,.86);color:#fff;font-size:13px;padding:11px 18px;border-radius:10px;
+  z-index:240;opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;
+  max-width:240px;text-align:center;}
+.zz-toast.zz-show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+</style>
+<script id="zz-interact-js">
+(function(){
+  function ready(fn){if(document.readyState!='loading')fn();else document.addEventListener('DOMContentLoaded',fn);}
+  function navs(el){var o=(el.getAttribute&&el.getAttribute('onclick'))||'';return /dpShow|dpBack/.test(o);}
+  ready(function(){
+    // ── Toast helper ──
+    var toastEl=null,toastT=null;
+    window.zzToast=function(msg){
+      if(!toastEl){toastEl=document.createElement('div');toastEl.className='zz-toast';document.body.appendChild(toastEl);}
+      toastEl.textContent=msg||'已选择';toastEl.classList.add('zz-show');
+      clearTimeout(toastT);toastT=setTimeout(function(){toastEl.classList.remove('zz-show');},1400);
+    };
+
+    // ── 1. Chip select groups ──
+    // Convention: .zz-seg (single) / [data-multi] (multi). Heuristic: any parent with >=2
+    // sibling chips whose onclick does NOT navigate.
+    function activate(chip,on){chip.classList.toggle('zz-on',on);chip.classList.toggle('zz-seg__item--on',on);}
+    function wireChipGroup(group){
+      if(group._zzc)return;
+      var chips=Array.prototype.filter.call(group.children,function(c){
+        var cl=(c.className||'')+'';return /chip|seg|tag|option|condition|grade|新|成新/.test(cl)||c.hasAttribute('data-chip');
+      });
+      // fall back to all element children if class match failed
+      if(chips.length<2)chips=Array.prototype.slice.call(group.children);
+      chips=chips.filter(function(c){return c.nodeType==1 && !navs(c);});
+      if(chips.length<2)return;
+      group._zzc=1;
+      var multi=group.hasAttribute('data-multi')||/multi/.test((group.className||'')+'');
+      chips.forEach(function(chip){
+        chip.style.cursor='pointer';
+        chip.addEventListener('click',function(e){
+          if(navs(chip))return;e.stopPropagation();
+          if(multi){var on=!(chip.classList.contains('zz-on'));activate(chip,on);}
+          else{chips.forEach(function(c){c.classList.remove('active','is-active','selected','checked');activate(c,false);});activate(chip,true);}
+        });
+      });
+    }
+    document.querySelectorAll('[data-chips],[data-chip-group],[class*="seg"],[class*="chip"],[class*="condition"],[class*="grade"]').forEach(function(g){
+      // only treat as group if it directly holds multiple chip-like children
+      if(g.children&&g.children.length>=2)wireChipGroup(g);
+    });
+
+    // ── 2. Accordion (collapse/expand) ──
+    // Convention: header [data-acc]; body = next element sibling. Heuristic: header class
+    // contains accordion/collapse/expand, or row has a chevron-up + a following sibling block.
+    function wireAcc(head){
+      if(head._zza)return;head._zza=1;
+      var body=head.getAttribute&&head.getAttribute('data-acc')
+        ? document.getElementById(head.getAttribute('data-acc')) : head.nextElementSibling;
+      if(!body)return;
+      body.classList.add('zz-acc-body');
+      var arrow=head.querySelector('[data-lucide],svg,[class*="arrow"],[class*="chevron"]');
+      if(arrow)arrow.classList.add('zz-acc-arrow');
+      head.style.cursor='pointer';
+      head.addEventListener('click',function(e){
+        if(navs(head))return;e.stopPropagation();
+        var collapsed=body.classList.toggle('zz-acc-collapsed');
+        if(arrow)arrow.classList.toggle('zz-rot',collapsed);
+      });
+    }
+    document.querySelectorAll('[data-acc],[class*="accordion"] [class*="head"],[class*="collapse"] [class*="head"]').forEach(wireAcc);
+
+    // ── 3. Bottom-sheet picker ──
+    var mask=null;
+    function ensureMask(){if(!mask){mask=document.createElement('div');mask.className='zz-isheet-mask';document.body.appendChild(mask);mask.addEventListener('click',closeSheets);}return mask;}
+    function closeSheets(){document.querySelectorAll('.zz-isheet.zz-open').forEach(function(s){s.classList.remove('zz-open');});if(mask)mask.classList.remove('zz-open');}
+    function openSheet(id){var s=document.getElementById(id);if(!s)return false;s.classList.add('zz-isheet','zz-open');ensureMask().classList.add('zz-open');return true;}
+    window.zzCloseSheets=closeSheets;
+    document.querySelectorAll('[data-sheet-open]').forEach(function(t){
+      if(t._zzs)return;t._zzs=1;t.style.cursor='pointer';
+      t.addEventListener('click',function(e){e.stopPropagation();if(!openSheet(t.getAttribute('data-sheet-open')))zzToast('请选择');});
+    });
+    document.querySelectorAll('[data-sheet-close]').forEach(function(c){if(c._zzsc)return;c._zzsc=1;c.style.cursor='pointer';c.addEventListener('click',function(e){e.stopPropagation();closeSheets();});});
+    // sheet option rows write value back to trigger + close
+    document.querySelectorAll('.zz-isheet [data-opt]').forEach(function(o){
+      if(o._zzo)return;o._zzo=1;o.style.cursor='pointer';
+      o.addEventListener('click',function(e){e.stopPropagation();
+        var sheet=o.closest('.zz-isheet');var tid=sheet&&sheet.id;
+        var trig=tid&&document.querySelector('[data-sheet-open="'+tid+'"] [data-picker-value]');
+        if(trig)trig.textContent=o.textContent.trim();
+        closeSheets();});
+    });
+
+    // ── 4. data-toast feedback (picker rows without a sheet, demo CTAs) ──
+    document.querySelectorAll('[data-toast]').forEach(function(el){
+      if(el._zzt)return;el._zzt=1;el.style.cursor='pointer';
+      el.addEventListener('click',function(e){if(navs(el))return;e.stopPropagation();zzToast(el.getAttribute('data-toast')||'已操作');});
+    });
+  });
+})();
+</script>
+"""
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -94,14 +214,24 @@ def _extract_html(text: str) -> str:
 
 def _inject_dp_reset(html: str) -> str:
     html = re.sub(r"<meta[^>]*name=[\"']viewport[\"'][^>]*>", "", html, flags=re.IGNORECASE)
+    # 1) head CSS reset
     if re.search(r"</head>", html, re.IGNORECASE):
-        return re.sub(r"</head>", DP_RESET + "</head>", html, count=1, flags=re.IGNORECASE)
-    if "<head>" in html:
-        return html.replace("<head>", "<head>" + DP_RESET, 1)
-    m = re.search(r"<html[^>]*>", html, re.IGNORECASE)
-    if m:
-        return html[:m.end()] + "<head>" + DP_RESET + "</head>" + html[m.end():]
-    return DP_RESET + html
+        html = re.sub(r"</head>", DP_RESET + "</head>", html, count=1, flags=re.IGNORECASE)
+    elif "<head>" in html:
+        html = html.replace("<head>", "<head>" + DP_RESET, 1)
+    else:
+        m = re.search(r"<html[^>]*>", html, re.IGNORECASE)
+        if m:
+            html = html[:m.end()] + "<head>" + DP_RESET + "</head>" + html[m.end():]
+        else:
+            html = DP_RESET + html
+    # 2) in-page interaction layer (chips / accordion / picker sheet / toast)
+    if "zz-interact-js" not in html:
+        if re.search(r"</body>", html, re.IGNORECASE):
+            html = re.sub(r"</body>", ZZ_INTERACT + "</body>", html, count=1, flags=re.IGNORECASE)
+        else:
+            html = html + ZZ_INTERACT
+    return html
 
 
 async def _call_json(prompt: str, image: Optional[str] = None) -> Optional[dict]:
@@ -460,6 +590,20 @@ async def _orchestrate(
             "  ③ 不要使用 <a href> 跳转，所有导航只用 dpShow / dpBack\n"
             "  ④ 每个屏幕都要有完整的 status-bar + nav-bar + 页面内容 + 底部 Tab bar（若有）\n"
             "  ⑤ 所有屏幕视觉风格、色彩规范必须与 s1 保持一致\n\n"
+            "▓▓▓▓▓ ⚡ 二级页内交互（不跳屏，系统已内置 JS 自动接管，禁止自己写 <script>）▓▓▓▓▓\n"
+            "下列「二级操作」只在本屏内响应，绝对不要绑 dpShow/dpBack：\n"
+            "  · 单选标签组（如 新旧程度/成色 99新·95新…）：外层 <div class=\"zz-seg\">，每项 <span class=\"zz-seg__item\">99新</span>，"
+            "默认选中项再加类 zz-seg__item--on。点击会自动切换高亮（单选）。\n"
+            "  · 多选标签组（如 购买渠道/标签）：外层加 data-multi（其余同上），点击可多选切换。\n"
+            "  · 可折叠区（如「补充信息 选填 ⌄」）：折叠区标题元素加 data-acc，紧跟其后的内容块会被它展开/收起；"
+            "标题里放一个 chevron-down 图标作为指示箭头。\n"
+            "  · 选择器行（如 商品分类/购买时间，行尾有 ›）：\n"
+            "      行元素加 data-sheet-open=\"catSheet\"，值文案用 <span data-picker-value>请选择</span>；\n"
+            "      并在该屏内提供底部选择层 <div class=\"zz-isheet\" id=\"catSheet\">…\n"
+            "        每个选项 <div data-opt>手机数码</div>（点选后自动写回行的值并关闭）…\n"
+            "        <div data-sheet-close>取消</div></div>（默认隐藏，点行弹出，点遮罩/取消关闭）。\n"
+            "      若该选择器不重要、不想做完整选择层：行上改加 data-toast=\"请选择购买时间\"，点击会弹 toast 提示。\n"
+            "  · 任何「演示性」按钮（点了只需反馈不跳屏）：加 data-toast=\"已提交\" 即可。\n\n"
             "▓▓▓▓▓ ⚡ 图标规范（Lucide Icons · 转转强弱标准）▓▓▓▓▓\n"
             "必须使用 Lucide 开源图标库，在 <head> 内引入 CDN：\n"
             "<script src=\"https://unpkg.com/lucide@latest/dist/umd/lucide.min.js\"></script>\n"
