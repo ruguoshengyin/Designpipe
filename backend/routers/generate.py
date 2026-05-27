@@ -471,7 +471,7 @@ async def _orchestrate(
         elif has_raw_wf:
             wireframe_ref = re.sub(r"<style[\s\S]*?</style>", "", raw_wf, flags=re.IGNORECASE)
             wireframe_ref = re.sub(r"<!--[\s\S]*?-->", "", wireframe_ref)
-            wireframe_ref = re.sub(r"\s+", " ", wireframe_ref).strip()[:4000]
+            wireframe_ref = re.sub(r"\s+", " ", wireframe_ref).strip()[:6000]
 
         # Phase 1: strategy decomposition
         yield _sse({"progress": "正在把策略拆解为具体组件…（约 10 秒）"})
@@ -514,12 +514,20 @@ async def _orchestrate(
 
         # Phase 2: generate hi-fi HTML (streaming)
         yield _sse({"progress": "高保真设计稿生成中…（约 30 秒）"})
-        wireframe_section = ("线框图参考：\n" + wireframe_ref) if wireframe_ref else ""
+        wireframe_section = (
+            "▓▓▓▓▓ 📐 线框骨架（必须继承——区域顺序/信息层级不可变）▓▓▓▓▓\n"
+            "以下是本方向已确认的线框结构，高保真必须 100% 继承这个骨架：\n"
+            "  · 从上到下各区域的顺序不可改变\n"
+            "  · 各区域内的信息层级（主标题/副标题/说明/CTA 位置）保持不变\n"
+            "  · 可在每个区域内丰富视觉细节、颜色、排版，但不得合并或删除任何区域\n\n"
+            + wireframe_ref
+        ) if wireframe_ref else ""
         hifi_prompt = (
-            "你是转转资深移动端UX工程师。本次任务有两个层次，顺序不可颠倒：\n"
-            "① 首先必须 100% 落实下面的【设计策略】——这是这个页面之所以存在的理由；\n"
-            "② 然后在策略骨架上套用转转设计规范（视觉皮肤）。\n"
-            "两者冲突时——策略优先。\n\n"
+            "你是转转资深移动端UX工程师。本次任务有三个层次，顺序不可颠倒：\n"
+            "① 首先必须 100% 继承下面的【线框骨架】——区域顺序和信息层级是骨架，不可变；\n"
+            "② 在骨架上 100% 落实下面的【设计策略】——策略模块必须全部出现，缺一不可；\n"
+            "③ 最后在骨架+策略上套用转转设计规范（视觉皮肤）。\n"
+            "三者冲突时——线框骨架 > 策略 > 视觉规范。\n\n"
             "⛔ 视觉硬约束（只约束皮肤，不得以此为由删减任何策略模块）：\n"
             "  · 唯一强调色：#FF0F27（转转品牌红）\n"
             "  · 禁止紫色系：#6366F1 #7C3AED #8B5CF6 #9333EA #A855F7 #C084FC 及所有 purple/violet\n"
@@ -530,13 +538,14 @@ async def _orchestrate(
             "  · 禁止混用容器风格：同一页面只能用「通栏列表行」或「圆角卡片」其中一种，不得混排\n"
             "    发布/表单页 → 统一通栏列表行，section间用8px灰色分隔块(#F8F8F8)\n"
             "    列表/首页 → 统一圆角卡片(16px)，卡片间距8px，左右margin 12px\n\n"
-            "▓▓▓▓▓ ⚡ 设计策略（最高优先级）▓▓▓▓▓\n"
+            "▓▓▓▓▓ ⚡ 设计策略（在线框骨架各区域内落地）▓▓▓▓▓\n"
             f"页面类型：【{page_type}】　导航栏标题：【{nav_title}】\n"
             f"▶ 选定方向：{dir_data.get('title', '')}（{dir_data.get('subtitle', '')}）\n"
             f"▶ 核心策略：{dir_data.get('oneliner', '')}\n"
             f"▶ 方向优势：{dir_data.get('advantage', '')}\n"
-            "▶ 必含模块清单（缺一不可）：\n"
+            "▶ 必含模块清单（缺一不可，对应放到线框骨架的对应区域里）：\n"
             f"{strategy_block}\n\n"
+            f"{wireframe_section}\n\n"
             f"{DESIGN_SPEC}\n\n"
             "█████ 页面结构规则 █████\n"
             "✅ 第一个子元素必须是 status-bar（44px）\n"
@@ -549,7 +558,6 @@ async def _orchestrate(
             '  <div style="display:flex;align-items:center;gap:6px;">...</div>\n'
             "</div>\n\n"
             f"{qa_context}\n\n"
-            f"{wireframe_section}\n\n"
             "▓▓▓▓▓ ⚡ 可交互多屏原型要求（必须实现）▓▓▓▓▓\n"
             "本次必须生成【多屏可交互 HTML 原型】，包含 3-5 个完整独立屏幕，用户可点击按钮跳转屏幕。\n\n"
             "【必须采用的 HTML 骨架结构】\n"
@@ -691,10 +699,12 @@ async def _orchestrate(
 ① 排版精修
   - 字号/字重/颜色严格遵守对照表（见下方）：不在表中的组合一律改为最接近的规范值
   - 标题 13px/600/#111；副标题 12px/400/#666；辅助说明 11px/400/#999；时间戳 10px/400/#BBB
-  - 导航栏标题 18px/700/#111；section标题 16px/700/#111
-  - 价格¥符号 12px/700/#111；价格数字 Akrobat 20px/800/#111（黑色，绝非红色）
+  - 导航栏标题 17px/500/#111（注意：17px / font-weight:500，v1.x 的 18px/700 是错误值）
+  - section标题 16px/600/#111
+  - 价格¥符号 12px/500/#FF0007；价格数字 20px/600/#FF0007（转转操作红，必须用 #FF0007，禁止用 #111 黑色）
+  - chip 文字：font-weight:300（Light），任何状态不加粗；chip 底色 #F7F7F7
   - 行高：单行标签 1.2，正文 1.5，多行说明 1.7
-  - 所有字体必须是 'PingFang SC'（检查每一处 font-family，消灭 Inter/Roboto/system-ui）
+  - 所有字体必须是 'PingFang SC'（检查每一处 font-family，消灭 Inter/Roboto/system-ui/Akrobat）
 
 ② 间距精修（4pt 基准）
   - 检查所有 padding/margin/gap，改为最接近的4的倍数（4/8/12/16/20/24/32px）
@@ -712,7 +722,8 @@ async def _orchestrate(
 
 ④ 颜色精修
   - 消灭所有蓝色（#007AFF/#4169E1/#1677FF 等），替换：次级操作→#F5F5F5底#111字，链接→#42A0FF仅文字
-  - 价格数字颜色强制为 #111111（黑色），不得为任何红色
+  - 价格数字颜色强制为 #FF0007（转转操作红），¥符号同色，禁止用 #111 黑色（v1.x 的黑色价格是错误值）
+  - 主 CTA 按钮背景 #FF0007；chip 选中态文字/边框 #FF0F27、背景 #FFF2F2；chip 未选中底色 #F7F7F7
   - 次级功能按钮（智能分组/批量编辑/自动排序等）：bg:#F5F5F5 color:#111 图标:#666
   - Lucide 图标颜色必须显式写在 style 属性中，不能依赖 color 继承
 
@@ -723,7 +734,7 @@ async def _orchestrate(
   - 底部操作栏：position:absolute; bottom:0（或 position:fixed，但在多屏结构中用absolute）
 
 ⑥ 组件尺寸精修
-  - 所有按钮高度：大按钮48px / 中按钮40px / 小按钮32px
+  - 所有按钮高度：主 CTA 按钮 40px（lg）/ 小按钮 32px（sm）——v1.x 的 48px 是错误值
   - Chip高度：26px；内边距：0 10px
   - Tab bar高度：60px；底部padding 8px保护home indicator区
   - 导航栏内容区：44px（状态栏44px+导航44px=总88px）
