@@ -141,7 +141,17 @@ ZZ_INTERACT = """
     var mask=null;
     function ensureMask(){if(!mask){mask=document.createElement('div');mask.className='zz-isheet-mask';document.body.appendChild(mask);mask.addEventListener('click',closeSheets);}return mask;}
     function closeSheets(){document.querySelectorAll('.zz-isheet.zz-open').forEach(function(s){s.classList.remove('zz-open');});if(mask)mask.classList.remove('zz-open');}
-    function openSheet(id){var s=document.getElementById(id);if(!s)return false;s.classList.add('zz-isheet','zz-open');ensureMask().classList.add('zz-open');return true;}
+    function openSheet(id){
+      var s=document.getElementById(id);if(!s)return false;
+      // mask 和 sheet 必须放进同一个 .dp-screen（同一层叠上下文），否则 body 级 mask 会盖住 screen 内的 sheet
+      var screen=s.closest('.dp-screen')||s.parentNode||document.body;
+      var m=ensureMask();
+      screen.appendChild(m);   // 先放遮罩
+      screen.appendChild(s);   // sheet 排在遮罩之后 → 永远在遮罩之上
+      s.classList.add('zz-isheet','zz-open');
+      m.classList.add('zz-open');
+      return true;
+    }
     window.zzCloseSheets=closeSheets;
     document.querySelectorAll('[data-sheet-open]').forEach(function(t){
       if(t._zzs)return;t._zzs=1;t.style.cursor='pointer';
