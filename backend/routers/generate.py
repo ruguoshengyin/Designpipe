@@ -92,6 +92,16 @@ ZZ_INTERACT = """
     // Convention: .zz-seg (single) / [data-multi] (multi). Heuristic: any parent with >=2
     // sibling chips whose onclick does NOT navigate.
     function activate(chip,on){chip.classList.toggle('zz-on',on);chip.classList.toggle('zz-seg__item--on',on);}
+    // 联动说明框：group 加 data-desc-box="boxId"，box 内放 [data-desc-title]/[data-desc-text] 槽，
+    // 每个 chip 带 data-desc-title / data-desc，点选时把内容写进说明框。
+    function applyDesc(group,chip){
+      var boxId=group.getAttribute&&group.getAttribute('data-desc-box');if(!boxId)return;
+      var box=document.getElementById(boxId);if(!box)return;
+      var t=chip.getAttribute('data-desc-title'),d=chip.getAttribute('data-desc');
+      var tEl=box.querySelector('[data-desc-title]'),dEl=box.querySelector('[data-desc-text]');
+      if(tEl&&t!=null)tEl.textContent=t;
+      if(dEl&&d!=null)dEl.textContent=d;
+    }
     function wireChipGroup(group){
       if(group._zzc)return;
       var chips=Array.prototype.filter.call(group.children,function(c){
@@ -108,7 +118,7 @@ ZZ_INTERACT = """
         chip.addEventListener('click',function(e){
           if(navs(chip))return;e.stopPropagation();
           if(multi){var on=!(chip.classList.contains('zz-on'));activate(chip,on);}
-          else{chips.forEach(function(c){c.classList.remove('active','is-active','selected','checked');activate(c,false);});activate(chip,true);}
+          else{chips.forEach(function(c){c.classList.remove('active','is-active','selected','checked');activate(c,false);});activate(chip,true);applyDesc(group,chip);}
         });
       });
     }
@@ -625,6 +635,11 @@ async def _orchestrate(
             "下列「二级操作」只在本屏内响应，绝对不要绑 dpShow/dpBack：\n"
             "  · 单选标签组（如 新旧程度/成色 99新·95新…）：外层 <div class=\"zz-seg\">，每项 <span class=\"zz-seg__item\">99新</span>，"
             "默认选中项再加类 zz-seg__item--on。点击会自动切换高亮（单选）。\n"
+            "  · 标签组联动说明框（如 成色 chip 下方有「99新标准：外观无…」说明卡）：必须为每个选项都配说明，"
+            "否则点其他标签说明不变=半成品。做法：标签组外层加 data-desc-box=\"gradeBox\"，每个 chip 加 "
+            "data-desc-title=\"95新标准\" data-desc=\"轻微使用痕迹，功能完好\"（每个等级都要写真实文案）；"
+            "说明框 <div id=\"gradeBox\"><div data-desc-title>99新标准</div><div data-desc-text>外观无明显划痕…</div></div>。"
+            "点选 chip 会自动把对应文案写进说明框，系统已接管，禁止自己写 <script>。\n"
             "  · 多选标签组（如 购买渠道/标签）：外层加 data-multi（其余同上），点击可多选切换。\n"
             "  · 可折叠区（如「补充信息 选填 ⌄」）：折叠区标题元素加 data-acc，紧跟其后的内容块会被它展开/收起；"
             "标题里放一个 chevron-down 图标作为指示箭头。\n"
